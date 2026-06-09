@@ -2,6 +2,13 @@
   min-height: 100vh;
   background: #f7f8fb;
   color: #172033;
+  color-scheme: light;
+}
+
+.app-shell.theme-dark {
+  background: #111827;
+  color: #e5e7eb;
+  color-scheme: dark;
 }
 
 .topbar {
@@ -15,6 +22,37 @@
   position: sticky;
   top: 0;
   z-index: 10;
+}
+
+.theme-dark .topbar,
+.theme-dark .panel {
+  background: #1f2937;
+  border-color: #374151;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.theme-dark .topbar h1,
+.theme-dark .panel h2,
+.theme-dark .role-card h3,
+.theme-dark .saved-games h3,
+.theme-dark .panel-title,
+.theme-dark .metric-card strong,
+.theme-dark .mini-card strong,
+.theme-dark .check-row,
+.theme-dark input,
+.theme-dark select {
+  color: #f9fafb;
+}
+
+.theme-dark .eyebrow,
+.theme-dark .muted,
+.theme-dark label,
+.theme-dark .code-strip span,
+.theme-dark .pin-box span,
+.theme-dark .metric-card span,
+.theme-dark .mini-card span,
+.theme-dark th {
+  color: #9ca3af;
 }
 
 .topbar h1,
@@ -51,6 +89,67 @@
 .round-meta,
 .panel-title {
   gap: 10px;
+}
+
+.preference-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compact-select {
+  align-items: center;
+  background: #eef2f7;
+  border-radius: 6px;
+  color: #172033;
+  display: flex;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 8px;
+}
+
+.compact-select select {
+  background: transparent;
+  border: 0;
+  min-height: 32px;
+  padding: 0 2px;
+}
+
+.theme-toggle {
+  background: #eef2f7;
+  border-radius: 6px;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+}
+
+.theme-toggle button {
+  align-items: center;
+  background: transparent;
+  border-radius: 5px;
+  color: #475569;
+  display: flex;
+  gap: 5px;
+  min-height: 32px;
+  padding: 5px 8px;
+}
+
+.theme-toggle button.active {
+  background: #ffffff;
+  color: #0f766e;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16);
+}
+
+.sr-only {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
 }
 
 .eyebrow {
@@ -156,6 +255,28 @@ select {
   padding: 8px 10px;
 }
 
+.theme-dark input,
+.theme-dark select,
+.theme-dark .compact-select,
+.theme-dark .theme-toggle,
+.theme-dark .ghost-button,
+.theme-dark .icon-button {
+  background: #111827;
+  border-color: #4b5563;
+}
+
+.theme-dark .ghost-button,
+.theme-dark .icon-button,
+.theme-dark .compact-select,
+.theme-dark .theme-toggle button {
+  color: #e5e7eb;
+}
+
+.theme-dark .theme-toggle button.active {
+  background: #0f766e;
+  color: #ffffff;
+}
+
 input:focus,
 select:focus,
 button:focus-visible {
@@ -229,11 +350,22 @@ button {
   padding: 10px;
 }
 
+.theme-dark .form-error {
+  background: #451a1a;
+  border-color: #7f1d1d;
+  color: #fecaca;
+}
+
 .rule-list,
 .workflow-list {
   color: #334155;
   margin: 0 0 18px;
   padding-left: 22px;
+}
+
+.theme-dark .rule-list,
+.theme-dark .workflow-list {
+  color: #d1d5db;
 }
 
 .rule-list li,
@@ -247,6 +379,12 @@ button {
   gap: 8px;
   margin-top: 18px;
   padding-top: 16px;
+}
+
+.theme-dark .saved-games,
+.theme-dark th,
+.theme-dark td {
+  border-color: #374151;
 }
 
 .saved-games h3 {
@@ -263,6 +401,21 @@ button {
   justify-content: space-between;
   padding: 10px;
   text-align: left;
+}
+
+.theme-dark .saved-game,
+.theme-dark .metric-card,
+.theme-dark .mini-card,
+.theme-dark .role-card,
+.theme-dark .info-box {
+  background: #111827;
+  border-color: #374151;
+}
+
+.theme-dark .saved-game,
+.theme-dark .info-box,
+.theme-dark .role-card p {
+  color: #d1d5db;
 }
 
 .admin-hero,
@@ -296,6 +449,13 @@ button {
   border-radius: 5px;
   color: #075985;
   padding: 4px 8px;
+}
+
+.theme-dark .code-strip strong,
+.theme-dark .pin-box strong {
+  background: #082f49;
+  border-color: #075985;
+  color: #bae6fd;
 }
 
 .status-pill,
@@ -420,6 +580,20 @@ button {
   padding: 14px;
 }
 
+.theme-dark .recommendation {
+  background: #052e2b;
+  border-color: #115e59;
+}
+
+.theme-dark .recommendation span,
+.theme-dark .recommendation strong {
+  color: #99f6e4;
+}
+
+.theme-dark .recommendation p {
+  color: #ccfbf1;
+}
+
 .recommendation span {
   color: #047857;
   font-size: 12px;
@@ -465,14 +639,29 @@ button {
   color: #1d4ed8;
 }
 
+.theme-dark .warning.info {
+  background: #172554;
+  color: #bfdbfe;
+}
+
 .warning.warning {
   background: #fffbeb;
   color: #92400e;
 }
 
+.theme-dark .warning.warning {
+  background: #451a03;
+  color: #fde68a;
+}
+
 .warning.danger {
   background: #fef2f2;
   color: #b91c1c;
+}
+
+.theme-dark .warning.danger {
+  background: #450a0a;
+  color: #fecaca;
 }
 
 .table-wrap {
