@@ -48,18 +48,29 @@ The current implementation stores games in the browser for immediate testing. Fo
 ## Supabase Deployment Path
 
 1. Create a Supabase project.
-2. Apply `supabase/migrations/0001_beer_game_schema.sql`.
+2. Apply both SQL files in order:
+   - `supabase/migrations/0001_beer_game_schema.sql`
+   - `supabase/migrations/0002_shared_game_documents.sql`
 3. Copy `.env.example` to `.env.local`.
 4. Set:
 
 ```bash
 VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-public-anon-key
+VITE_SUPABASE_PUBLISHABLE_KEY=your-public-publishable-key
 ```
 
 5. Deploy the frontend to Vercel or Netlify.
 
-The schema includes the planned domain entities, indexes, checks, and baseline RLS policies. Production synchronization should move round submission and advancement into Supabase RPC or Edge Functions so each transition is atomic for all users.
+For GitHub Pages, add repository variables under **Settings -> Secrets and variables -> Actions -> Variables**:
+
+```bash
+VITE_SUPABASE_URL
+VITE_SUPABASE_PUBLISHABLE_KEY
+```
+
+The GitHub Pages workflow passes those variables to the Vite build.
+
+The schema includes the planned normalized domain entities plus `game_documents`, a pragmatic shared JSON document table used by the current frontend for realtime classroom synchronization. This table uses public anon policies for ease of classroom access, so do not store private data in game records. A later production hardening step should move round submission and advancement into Supabase RPC or Edge Functions with stricter role-based access.
 
 ## Rule Notes
 

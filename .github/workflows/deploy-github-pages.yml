@@ -40,6 +40,8 @@ jobs:
         run: npm run build
         env:
           GITHUB_PAGES: 'true'
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

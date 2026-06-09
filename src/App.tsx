@@ -54,6 +54,7 @@ import {
   type RoleRoundState,
   type Session,
 } from './domain/types'
+import { loadPersistedGames, persistGame, subscribeToGames } from './lib/gameRepository'
 import { clearLocalData, loadGames, loadSession, replaceGame, saveGames, saveSession } from './lib/localStore'
 import { isSupabaseConfigured } from './lib/supabase'
 
@@ -67,13 +68,37 @@ function App() {
   useEffect(() => saveSession(session), [session])
 
   useEffect(() => {
+    void loadPersistedGames().then(setGames)
+
+    return subscribeToGames((game) => {
+      setGames((previous) => replaceGame(previous, game))
+    })
+  }, [])
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
       setNow(Date.now())
-      setGames((previous) =>
-        previous.map((game) =>
-          game.id === session?.gameId ? maybeAdvanceExpiredRound(game, new Date()) : game,
-        ),
-      )
+      setGames((previous) => {
+        let changedGame: Game | null = null
+        const nextGames = previous.map((game) => {
+          if (game.id !== session?.gameId) {
+            return game
+          }
+
+          const nextGame = maybeAdvanceExpiredRound(game, new Date())
+          if (nextGame !== game) {
+            changedGame = nextGame
+          }
+
+          return nextGame
+        })
+
+        if (changedGame) {
+          void persistGame(changedGame)
+        }
+
+        return nextGames
+      })
     }, 1000)
 
     return () => window.clearInterval(interval)
@@ -81,6 +106,7 @@ function App() {
 
   function upsertGame(game: Game) {
     setGames((previous) => replaceGame(previous, game))
+    void persistGame(game)
   }
 
   function handleCreateGame(name: string, config: GameConfig) {
