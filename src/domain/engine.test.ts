@@ -9,6 +9,8 @@ import {
   submitRoleRound,
   synchronizeSimulationRoundClock,
 } from './engine'
+import { buildRecommendation, getEffectiveOrderCap } from './recommendation'
+import type { RoleRoundState } from './types'
 
 describe('Beer Game round engine', () => {
   it('keeps customer demand physical until retailer submits it', () => {
@@ -106,7 +108,7 @@ describe('Beer Game round engine', () => {
     expect(distributorRound3?.materialMovedToInventory).toBe(4)
   })
 
-  it('treats producer as unlimited upstream stock in v1', () => {
+  it('charges producer inventory costs for unsold planned output', () => {
     const game = startGame(
       createGame({
         name: 'Producer',
@@ -126,7 +128,149 @@ describe('Beer Game round engine', () => {
     expect(producer?.incomingOrder).toBe(4)
     expect(producer?.shippedQuantity).toBe(4)
     expect(producer?.endingBackorder).toBe(0)
+    expect(producer?.endingInventory).toBe(0)
     expect(producer?.totalRoundCost).toBe(0)
+  })
+
+  it('leaves producer inventory when downstream orders less than planned output', () => {
+    let game = startGame(
+      createGame({
+        name: 'Producer inventory',
+        config: { ...defaultGameConfig, startingInventory: 0, startingTransport: 0, startingWareneingang: 0 },
+      }),
+    )
+
+    game = submitRoleRound({
+      game,
+      role: 'producer',
+      submittedBy: 'test',
+      newOrderToSupplier: 0,
+      autoAdvance: false,
+    })
+    game = submitRoleRound({
+      game,
+      role: 'distributor',
+      submittedBy: 'test',
+      newOrderToSupplier: 0,
+      autoAdvance: false,
+    })
+    game = submitRoleRound({
+      game,
+      role: 'wholesaler',
+      submittedBy: 'test',
+      newOrderToSupplier: 0,
+      autoAdvance: false,
+    })
+    game = submitRoleRound({
+      game,
+      role: 'retailer',
+      submittedBy: 'test',
+      incomingOrder: 4,
+      newOrderToSupplier: 0,
+      autoAdvance: false,
+    })
+    game = advanceRound(game, 'test')
+    game = submitRoleRound({
+      game,
+      role: 'producer',
+      submittedBy: 'test',
+      newOrderToSupplier: 0,
+      autoAdvance: false,
+    })
+    const producer = getCurrentRoleState(game, 'producer')
+
+    expect(producer?.startingInventory).toBe(4)
+    expect(producer?.incomingOrder).toBe(0)
+    expect(producer?.endingInventory).toBe(4)
+    expect(producer?.inventoryCost).toBe(4)
+  })
+
+  it('stops producer planned output when existing inventory is already high', () => {
+    let game = startGame(
+      createGame({
+        name: 'Producer throttle',
+        config: { ...defaultGameConfig, startingTransport: 0, startingWareneingang: 0 },
+      }),
+    )
+
+    for (let round = 1; round <= 4; round += 1) {
+      game = submitRoleRound({
+        game,
+        role: 'producer',
+        submittedBy: 'test',
+        newOrderToSupplier: 0,
+        autoAdvance: false,
+      })
+      const producer = getCurrentRoleState(game, 'producer')
+      expect(producer?.startingInventory).toBeLessThanOrEqual(12)
+
+      for (const role of ['distributor', 'wholesaler', 'retailer'] as const) {
+        game = submitRoleRound({
+          game,
+          role,
+          submittedBy: 'test',
+          incomingOrder: role === 'retailer' ? 0 : undefined,
+          newOrderToSupplier: 0,
+          autoAdvance: false,
+        })
+      }
+
+      if (round < 4) {
+        game = advanceRound(game, 'test')
+      }
+    }
+  })
+
+  it('ramps producer planned output above baseline when backlog is high', () => {
+    let game = startGame(
+      createGame({
+        name: 'Producer ramp',
+        config: { ...defaultGameConfig, startingInventory: 0, startingTransport: 0, startingWareneingang: 0 },
+      }),
+    )
+
+    game = submitRoleRound({
+      game,
+      role: 'producer',
+      submittedBy: 'test',
+      newOrderToSupplier: 0,
+      autoAdvance: false,
+    })
+    game = submitRoleRound({
+      game,
+      role: 'distributor',
+      submittedBy: 'test',
+      newOrderToSupplier: 16,
+      autoAdvance: false,
+    })
+    game = submitRoleRound({
+      game,
+      role: 'wholesaler',
+      submittedBy: 'test',
+      newOrderToSupplier: 0,
+      autoAdvance: false,
+    })
+    game = submitRoleRound({
+      game,
+      role: 'retailer',
+      submittedBy: 'test',
+      incomingOrder: 4,
+      newOrderToSupplier: 0,
+      autoAdvance: false,
+    })
+    game = advanceRound(game, 'test')
+    game = submitRoleRound({
+      game,
+      role: 'producer',
+      submittedBy: 'test',
+      newOrderToSupplier: 0,
+      autoAdvance: false,
+    })
+    game = advanceRound(game, 'test')
+
+    const producerRound3 = getCurrentRoleState(game, 'producer')
+    expect(producerRound3?.startingInventory).toBeGreaterThan(defaultGameConfig.initialIncomingOrder)
+    expect(producerRound3?.startingInventory).toBeLessThanOrEqual(getEffectiveOrderCap(defaultGameConfig))
   })
 
   it('uses previous order on timeout for unsubmitted role orders', () => {
@@ -213,4 +357,194 @@ describe('Beer Game round engine', () => {
     expect(synced.config.roundSeconds).toBe(5)
     expect(durationMs).toBe(5_000)
   })
+
+  it('recommends nonzero early replenishment for JIT flow', () => {
+    const game = startGame(createGame({ name: 'JIT', config: defaultGameConfig }))
+    const retailer = getCurrentRoleState(game, 'retailer')
+
+    expect(retailer?.recommendedOrderQuantity).toBeGreaterThan(0)
+    expect(retailer?.recommendationInputs.inventoryPosition).toBeDefined()
+    expect(retailer?.recommendationInputs.targetInventoryPosition).toBeDefined()
+  })
+
+  it('caps JIT recommendations with automatic and explicit caps', () => {
+    const uncappedRecommendation = buildRecommendation(
+      'wholesaler',
+      { ...defaultGameConfig, maxOrderQuantity: null },
+      {
+        startingInventory: 0,
+        materialMovedToWareneingang: 0,
+        previousBackorder: 100,
+        roundNumber: 8,
+      },
+      submittedHistory('wholesaler', [8, 8, 8]),
+    )
+    const explicitRecommendation = buildRecommendation(
+      'wholesaler',
+      { ...defaultGameConfig, maxOrderQuantity: 6 },
+      {
+        startingInventory: 0,
+        materialMovedToWareneingang: 0,
+        previousBackorder: 100,
+        roundNumber: 8,
+      },
+      submittedHistory('wholesaler', [8, 8, 8]),
+    )
+
+    expect(getEffectiveOrderCap(defaultGameConfig)).toBe(16)
+    expect(uncappedRecommendation.quantity).toBe(16)
+    expect(uncappedRecommendation.inputs.capApplied).toBe(true)
+    expect(explicitRecommendation.quantity).toBe(6)
+    expect(explicitRecommendation.inputs.orderCap).toBe(6)
+  })
+
+  it('reduces recommendations quickly when inventory position is above target', () => {
+    const recommendation = buildRecommendation(
+      'retailer',
+      defaultGameConfig,
+      {
+        startingInventory: 30,
+        materialMovedToWareneingang: 0,
+        previousBackorder: 0,
+        roundNumber: 8,
+      },
+      submittedHistory('retailer', [4, 4, 4]),
+    )
+
+    expect(recommendation.inputs.inventoryPosition).toBeGreaterThan(recommendation.inputs.targetInventoryPosition)
+    expect(recommendation.quantity).toBe(0)
+  })
+
+  it('enforces order caps for manual submissions', () => {
+    const game = startGame(
+      createGame({
+        name: 'Cap',
+        config: { ...defaultGameConfig, maxOrderQuantity: 5 },
+      }),
+    )
+
+    expect(() =>
+      submitRoleRound({
+        game,
+        role: 'retailer',
+        submittedBy: 'test',
+        incomingOrder: 4,
+        newOrderToSupplier: 6,
+        autoAdvance: false,
+      }),
+    ).toThrow('Order quantity must be 5 or lower.')
+
+    const submittedAtCap = submitRoleRound({
+      game,
+      role: 'retailer',
+      submittedBy: 'test',
+      incomingOrder: 4,
+      newOrderToSupplier: 5,
+      autoAdvance: false,
+    })
+
+    expect(getCurrentRoleState(submittedAtCap, 'retailer')?.newOrderToSupplier).toBe(5)
+  })
+
+  it('caps timeout fallback orders from older saved state', () => {
+    let game = startGame(createGame({ name: 'Timeout cap', config: defaultGameConfig }))
+    game = submitRoleRound({
+      game,
+      role: 'retailer',
+      submittedBy: 'test',
+      incomingOrder: 4,
+      newOrderToSupplier: 12,
+      autoAdvance: false,
+    })
+    game = advanceRound(game, 'test')
+    game = { ...game, config: { ...game.config, maxOrderQuantity: 5 } }
+
+    const advanced = advanceRound(game, 'timer')
+    const timedOutRetailer = advanced.roleRoundStates.find(
+      (state) => state.role === 'retailer' && state.roundNumber === 2,
+    )
+
+    expect(timedOutRetailer?.timedOut).toBe(true)
+    expect(timedOutRetailer?.newOrderToSupplier).toBe(5)
+  })
+
+  it('caps simulation bot orders', () => {
+    const game = startGame(
+      createGame({
+        name: 'Simulation cap',
+        config: { ...defaultGameConfig, simulationMode: true, maxOrderQuantity: 3 },
+      }),
+    )
+    const submitted = submitSimulationRound(game, () => 0.95)
+
+    for (const state of submitted.roleRoundStates.filter((state) => state.role !== 'producer')) {
+      expect(state.newOrderToSupplier).toBeLessThanOrEqual(3)
+    }
+  })
+
+  it('keeps KUTFA0-style low-demand simulation orders bounded', () => {
+    const demands = [4, 3, 4, 4, 3, 7, 6, 7, 6, 6, 8, 5, 5, 6, 4, 2, 2, 7, 2, 8]
+    let demandIndex = 0
+    let game = startGame(createGame({ name: 'KUTFA0 Regression', config: { ...defaultGameConfig, simulationMode: true } }))
+
+    for (let round = 1; round <= 20 && game.status === 'active'; round += 1) {
+      const demand = demands[demandIndex++] ?? 4
+      const randomForDemand = (demand - 2) / 7
+      game = submitSimulationRound(game, () => randomForDemand)
+      const nonProducerStates = game.roleRoundStates.filter(
+        (state) => state.roundNumber === round && state.role !== 'producer',
+      )
+
+      expect(nonProducerStates.every((state) => (state.newOrderToSupplier ?? 0) <= 16)).toBe(true)
+      game = advanceRound(game, 'test')
+    }
+
+    const totalCost = game.costSnapshots.reduce((sum, snapshot) => sum + snapshot.totalRoundCost, 0)
+    expect(totalCost).toBeLessThan(4856)
+  })
 })
+
+function submittedHistory(role: RoleRoundState['role'], incomingOrders: number[]): RoleRoundState[] {
+  return incomingOrders.map((incomingOrder, index) => ({
+    id: `history-${index}`,
+    gameId: 'game-test',
+    roundNumber: index + 1,
+    role,
+    startingInventory: 0,
+    transportBufferBefore: 0,
+    wareneingangBufferBefore: 0,
+    materialMovedToInventory: 0,
+    materialMovedToWareneingang: 0,
+    incomingOrder,
+    incomingOrderSource: 'downstream_previous_order',
+    previousBackorder: 0,
+    totalDemand: incomingOrder,
+    shippedQuantity: incomingOrder,
+    endingInventory: 0,
+    endingBackorder: 0,
+    newOrderToSupplier: incomingOrder,
+    recommendedOrderQuantity: incomingOrder,
+    recommendationReason: '',
+    recommendationInputs: {
+      forecastDemand: incomingOrder,
+      previousBackorder: 0,
+      targetSafetyStock: 0,
+      currentInventory: 0,
+      pipelineInventory: 0,
+      movingAverageWindow: 3,
+      inventoryPosition: 0,
+      targetInventoryPosition: 0,
+      uncappedOrder: incomingOrder,
+      orderCap: 16,
+      capApplied: false,
+    },
+    warnings: [],
+    inventoryCost: 0,
+    backorderCost: 0,
+    totalRoundCost: 0,
+    submittedBy: 'test',
+    submittedAt: new Date(0).toISOString(),
+    submitted: true,
+    timedOut: false,
+  }))
+}

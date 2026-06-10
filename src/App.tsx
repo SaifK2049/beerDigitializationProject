@@ -98,6 +98,7 @@ const text = {
     startingTransport: 'Starting Transport',
     startingWareneingang: 'Starting Wareneingang',
     initialRoleOrder: 'Initial role order',
+    orderCap: 'Order cap',
     inventoryCost: 'Inventory cost',
     backorderCost: 'Backorder cost',
     safetyStock: 'Safety stock',
@@ -171,6 +172,8 @@ const text = {
     decisionSupport: 'Decision Support',
     suggestedOrder: 'Suggested order',
     forecast: 'Forecast',
+    inventoryPosition: 'Inventory position',
+    targetPosition: 'Target position',
     pipeline: 'Pipeline',
     noWarnings: 'No active warning indicators.',
     ownHistory: 'Own History',
@@ -183,7 +186,7 @@ const text = {
     timeout: 'Timeout',
     physicalCustomerOrder: 'Physical customer order',
     newOrderToSupplier: 'New order to upstream supplier',
-    producerUnlimited: 'Producer uses unlimited upstream stock in v1. No supplier order is required.',
+    producerUnlimited: 'Producer has no upstream supplier. Unsold production stock still creates inventory cost.',
     submitAndLock: 'Submit and lock round',
     submitFailed: 'Could not submit this round.',
     timerLobby: 'Lobby',
@@ -208,6 +211,7 @@ const text = {
     startingTransport: 'Start Transport',
     startingWareneingang: 'Start Wareneingang',
     initialRoleOrder: 'Anfangsauftrag',
+    orderCap: 'Bestellgrenze',
     inventoryCost: 'Lagerkosten',
     backorderCost: 'Rueckstandskosten',
     safetyStock: 'Sicherheitsbestand',
@@ -281,6 +285,8 @@ const text = {
     decisionSupport: 'Entscheidungsunterstuetzung',
     suggestedOrder: 'Bestellvorschlag',
     forecast: 'Prognose',
+    inventoryPosition: 'Bestandsposition',
+    targetPosition: 'Zielposition',
     pipeline: 'Pipeline',
     noWarnings: 'Keine aktiven Warnhinweise.',
     ownHistory: 'Eigener Verlauf',
@@ -293,7 +299,7 @@ const text = {
     timeout: 'Zeitablauf',
     physicalCustomerOrder: 'Physischer Kundenauftrag',
     newOrderToSupplier: 'Neue Bestellung an vorgelagerte Rolle',
-    producerUnlimited: 'Produktion nutzt in v1 unbegrenzten vorgelagerten Bestand. Keine Bestellung erforderlich.',
+    producerUnlimited: 'Produktion hat keine vorgelagerte Rolle. Ungenutzter Produktionsbestand verursacht Lagerkosten.',
     submitAndLock: 'Runde abgeben und sperren',
     submitFailed: 'Diese Runde konnte nicht abgegeben werden.',
     timerLobby: 'Lobby',
@@ -527,6 +533,10 @@ function CreateGamePanel({ onCreate }: { onCreate: (name: string, config: GameCo
     setConfig((previous) => ({ ...previous, [key]: parsed }))
   }
 
+  function updateNullableNumber(key: keyof GameConfig, value: string) {
+    setConfig((previous) => ({ ...previous, [key]: value === '' ? null : Number(value) }))
+  }
+
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
     onCreate(name, config)
@@ -555,6 +565,7 @@ function CreateGamePanel({ onCreate }: { onCreate: (name: string, config: GameCo
           <NumberField label={t.startingTransport} value={config.startingTransport} onChange={(value) => updateNumber('startingTransport', value)} />
           <NumberField label={t.startingWareneingang} value={config.startingWareneingang} onChange={(value) => updateNumber('startingWareneingang', value)} />
           <NumberField label={t.initialRoleOrder} value={config.initialIncomingOrder} onChange={(value) => updateNumber('initialIncomingOrder', value)} />
+          <NumberField label={t.orderCap} value={config.maxOrderQuantity ?? ''} onChange={(value) => updateNullableNumber('maxOrderQuantity', value)} />
           <NumberField label={t.inventoryCost} value={config.inventoryCostPerUnit} onChange={(value) => updateNumber('inventoryCostPerUnit', value)} step="0.5" />
           <NumberField label={t.backorderCost} value={config.backorderCostPerUnit} onChange={(value) => updateNumber('backorderCostPerUnit', value)} step="0.5" />
           <NumberField label={t.safetyStock} value={config.targetSafetyStock} onChange={(value) => updateNumber('targetSafetyStock', value)} />
@@ -985,9 +996,10 @@ function RoleView({
           <div className="formula-grid">
             <MiniMetric label={t.forecast} value={state.recommendationInputs.forecastDemand.toFixed(1)} />
             <MiniMetric label={t.backorder} value={state.recommendationInputs.previousBackorder} />
-            <MiniMetric label={t.safetyStock} value={state.recommendationInputs.targetSafetyStock} />
-            <MiniMetric label={t.inventory} value={state.recommendationInputs.currentInventory} />
+            <MiniMetric label={t.inventoryPosition} value={(state.recommendationInputs.inventoryPosition ?? 0).toFixed(1)} />
+            <MiniMetric label={t.targetPosition} value={(state.recommendationInputs.targetInventoryPosition ?? 0).toFixed(1)} />
             <MiniMetric label={t.pipeline} value={state.recommendationInputs.pipelineInventory} />
+            <MiniMetric label={t.orderCap} value={state.recommendationInputs.orderCap ?? game.config.maxOrderQuantity ?? 'Auto'} />
           </div>
           {state.warnings.length > 0 ? (
             <div className="warning-list">
@@ -1292,12 +1304,14 @@ function formatRecommendationReason(state: RoleRoundState, language: Language): 
   const inputs = state.recommendationInputs
   if (state.role === 'producer') {
     return language === 'de'
-      ? 'Produktion nutzt in v1 unbegrenzten vorgelagerten Bestand; keine Bestellung erforderlich.'
-      : 'Producer uses unlimited upstream stock in v1; no supplier order is required.'
+      ? 'Produktion hat keine vorgelagerte Rolle; ungenutzter Produktionsbestand verursacht Lagerkosten.'
+      : 'Producer has no upstream supplier; unsold production stock still creates inventory cost.'
   }
 
   if (language === 'de') {
-    return `Vorschlag ${state.recommendedOrderQuantity}: Prognose ${formatNumber(inputs.forecastDemand, language)} + Rueckstand ${inputs.previousBackorder} + Sicherheitsbestand ${inputs.targetSafetyStock} - Bestand ${inputs.currentInventory} - Pipeline ${inputs.pipelineInventory}.`
+    const targetPosition = inputs.targetInventoryPosition ?? 0
+    const inventoryPosition = inputs.inventoryPosition ?? 0
+    return `Vorschlag ${state.recommendedOrderQuantity}: Prognose ${formatNumber(inputs.forecastDemand, language)} plus schrittweise JIT-Korrektur zur Zielposition ${formatNumber(targetPosition, language)} von aktueller Position ${formatNumber(inventoryPosition, language)}.${inputs.capApplied ? ` Von ${inputs.uncappedOrder} auf Grenze ${inputs.orderCap} begrenzt.` : ''}`
   }
 
   return state.recommendationReason

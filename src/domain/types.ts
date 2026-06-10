@@ -109,6 +109,11 @@ export interface RecommendationInputs {
   currentInventory: number
   pipelineInventory: number
   movingAverageWindow: number
+  inventoryPosition: number
+  targetInventoryPosition: number
+  uncappedOrder: number
+  orderCap: number
+  capApplied: boolean
 }
 
 export interface DecisionWarning {
@@ -118,6 +123,7 @@ export interface DecisionWarning {
     | 'excess_inventory_risk'
     | 'sudden_demand_increase'
     | 'order_amplification'
+    | 'order_cap_applied'
   label: string
   severity: 'info' | 'warning' | 'danger'
   detail: string

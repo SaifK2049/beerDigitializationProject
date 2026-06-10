@@ -1,4 +1,4 @@
-import { buildRecommendation } from './recommendation'
+import { buildRecommendation, getEffectiveOrderCap } from './recommendation'
 import {
   ROLES,
   compactRoleLabels,
@@ -245,15 +245,14 @@ export function submitRoleRound(input: SubmitRoundInput): Game {
   const newOrderToSupplier =
     role === 'producer'
       ? 0
-      : requireValidOrder(input.newOrderToSupplier, game.config.maxOrderQuantity)
+      : requireValidOrder(input.newOrderToSupplier, getEffectiveOrderCap(game.config))
 
   const totalDemand = incomingOrder + state.previousBackorder
-  const canShipUnlimited = role === 'producer'
-  const shippedQuantity = canShipUnlimited ? totalDemand : Math.min(state.startingInventory, totalDemand)
-  const endingBackorder = canShipUnlimited ? 0 : totalDemand - shippedQuantity
-  const endingInventory = canShipUnlimited ? 0 : state.startingInventory - shippedQuantity
-  const inventoryCost = role === 'producer' ? 0 : endingInventory * game.config.inventoryCostPerUnit
-  const backorderCost = role === 'producer' ? 0 : endingBackorder * game.config.backorderCostPerUnit
+  const shippedQuantity = Math.min(state.startingInventory, totalDemand)
+  const endingBackorder = totalDemand - shippedQuantity
+  const endingInventory = state.startingInventory - shippedQuantity
+  const inventoryCost = endingInventory * game.config.inventoryCostPerUnit
+  const backorderCost = endingBackorder * game.config.backorderCostPerUnit
   const totalRoundCost = inventoryCost + backorderCost
   const submittedAt = new Date().toISOString()
 
@@ -358,7 +357,7 @@ export function advanceRound(game: Game, advancedBy: string): Game {
       role,
       submittedBy: 'timer',
       incomingOrder: role === 'retailer' ? getDemoOrFallbackCustomerDemand(nextGame) : undefined,
-      newOrderToSupplier: getPreviousOutgoingOrder(nextGame, role),
+      newOrderToSupplier: getCappedPreviousOutgoingOrder(nextGame, role),
       timedOut: true,
       autoAdvance: false,
     })
@@ -455,11 +454,16 @@ function createRoleRoundState(game: Game, role: Role, roundNumber: number): Role
     roundNumber === 1 ? game.config.startingWareneingang : previous?.materialMovedToWareneingang ?? 0
   const materialMovedToInventory = wareneingangBufferBefore
   const materialMovedToWareneingang = transportBufferBefore
-  const startingInventory = role === 'producer' ? 0 : previousInventory + materialMovedToInventory
+  const availableBeforePlannedOutput = previousInventory + materialMovedToInventory
   const incomingOrder =
     role === 'retailer'
       ? getConfiguredCustomerDemand(game, roundNumber)
       : getIncomingOrderFromDownstream(game, role, roundNumber)
+  const producerPlannedOutput =
+    role === 'producer'
+      ? getProducerPlannedOutput(game, availableBeforePlannedOutput, incomingOrder ?? 0, previousBackorder)
+      : 0
+  const startingInventory = availableBeforePlannedOutput + producerPlannedOutput
   const recommendation = buildRecommendation(
     role,
     game.config,
@@ -573,6 +577,36 @@ function getDemoOrFallbackCustomerDemand(game: Game): number {
   return getConfiguredCustomerDemand(game, game.currentRound) ?? 0
 }
 
+function getProducerPlannedOutput(
+  game: Game,
+  availableInventory: number,
+  incomingOrder: number,
+  previousBackorder: number,
+): number {
+  const recentSubmittedStates = game.roleRoundStates
+    .filter((state) => state.role === 'producer' && state.submitted && state.incomingOrder !== null)
+    .slice(-game.config.movingAverageWindow)
+  const recentIncomingOrders = recentSubmittedStates.map((state) => state.incomingOrder ?? 0)
+  const forecastDemand =
+    recentIncomingOrders.length === 0
+      ? game.config.initialIncomingOrder
+      : recentIncomingOrders.reduce((sum, value) => sum + value, 0) / recentIncomingOrders.length
+  const targetInventory = Math.max(game.config.initialIncomingOrder * 2, forecastDemand * 2)
+  const productionCapacity = Math.max(getEffectiveOrderCap(game.config), game.config.initialIncomingOrder * 4)
+  const inventorySurplus = Math.max(0, availableInventory - targetInventory)
+  const totalDemandPressure = incomingOrder + previousBackorder
+  if (totalDemandPressure === 0 && availableInventory >= targetInventory) {
+    return 0
+  }
+
+  const backorderRecovery = previousBackorder * 0.5
+  const demandDrivenOutput =
+    totalDemandPressure > 0 ? Math.max(incomingOrder, forecastDemand) + backorderRecovery : forecastDemand
+  const plannedOutput = Math.round(Math.max(0, demandDrivenOutput - inventorySurplus))
+
+  return Math.max(0, Math.min(productionCapacity, plannedOutput))
+}
+
 function getPreviousOutgoingOrder(game: Game, role: Role): number {
   const latestSubmitted = game.roleRoundStates
     .filter((state) => state.role === role && state.submitted && state.newOrderToSupplier !== null)
@@ -581,13 +615,17 @@ function getPreviousOutgoingOrder(game: Game, role: Role): number {
   return latestSubmitted?.newOrderToSupplier ?? 0
 }
 
+function getCappedPreviousOutgoingOrder(game: Game, role: Role): number {
+  return Math.min(getPreviousOutgoingOrder(game, role), getEffectiveOrderCap(game.config))
+}
+
 function shouldAutoAdvance(game: Game): boolean {
   return ROLES.every((role) => getCurrentRoleState(game, role)?.submitted)
 }
 
-function requireValidOrder(value: number | undefined, maxOrderQuantity: number | null): number {
+function requireValidOrder(value: number | undefined, maxOrderQuantity: number): number {
   const quantity = requireNonNegativeInteger(value, 'Order quantity must be a non-negative integer.')
-  if (maxOrderQuantity !== null && quantity > maxOrderQuantity) {
+  if (quantity > maxOrderQuantity) {
     throw new Error(`Order quantity must be ${maxOrderQuantity} or lower.`)
   }
 
