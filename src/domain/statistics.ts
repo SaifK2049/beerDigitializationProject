@@ -17,6 +17,8 @@ export function getRoleHistory(game: Game, role: Role): RoleStatisticsPoint[] {
         inventory: state.endingInventory ?? 0,
         backorder: state.endingBackorder ?? 0,
         shipped: state.shippedQuantity ?? 0,
+        inventoryCost: state.inventoryCost ?? 0,
+        backorderCost: state.backorderCost ?? 0,
         roundCost,
         cumulativeCost,
       }

@@ -441,6 +441,7 @@ button {
 .theme-dark .saved-game,
 .theme-dark .metric-card,
 .theme-dark .mini-card,
+.theme-dark .role-cost-chart,
 .theme-dark .role-card,
 .theme-dark .info-box {
   background: #111827;
@@ -728,6 +729,43 @@ th {
   width: 100%;
 }
 
+.role-cost-charts {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.role-cost-chart {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.role-cost-chart-header {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.role-cost-chart-header h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.role-cost-chart-header strong {
+  color: #172033;
+  font-size: 18px;
+}
+
+.theme-dark .role-cost-chart-header strong {
+  color: #f9fafb;
+}
+
 .waiting-panel {
   margin: clamp(16px, 4vw, 44px);
 }
@@ -736,6 +774,7 @@ th {
   .home-grid,
   .role-layout,
   .metric-grid,
+  .role-cost-charts,
   .role-grid {
     grid-template-columns: 1fr;
   }

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import {
   CartesianGrid,
+  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -840,7 +841,7 @@ function AdminView({
                 </div>
               ))}
             </div>
-            <AdminChart game={game} />
+            <AdminCostCharts game={game} costs={costs} />
           </section>
         </>
       )}
@@ -1155,33 +1156,41 @@ function RoleChart({ data }: { data: ReturnType<typeof getRoleHistory> }) {
   )
 }
 
-function AdminChart({ game }: { game: Game }) {
+function AdminCostCharts({ game, costs }: { game: Game; costs: Record<Role, number> }) {
   const { language, t } = usePreferences()
-  const data = ROLES.flatMap((role) =>
-    getRoleHistory(game, role).map((point) => ({
-      ...point,
-      role: compactRoleLabels[role],
-      roleRound: `${compactRoleLabels[role]} R${point.round}`,
-    })),
-  )
+  const histories = ROLES.map((role) => ({ role, data: getRoleHistory(game, role) }))
 
-  if (data.length === 0) {
+  if (histories.every(({ data }) => data.length === 0)) {
     return <p className="muted">{t.statisticsPending}</p>
   }
 
   return (
-    <div className="chart-frame">
-      <ResponsiveContainer width="100%" height={280}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="roleRound" hide />
-          <YAxis allowDecimals={false} />
-          <Tooltip formatter={(value, name) => formatChartValue(Number(value), String(name), language)} />
-          <Line type="monotone" dataKey="cumulativeCost" stroke="#7c3aed" strokeWidth={2} />
-          <Line type="monotone" dataKey="inventory" stroke="#2563eb" strokeWidth={2} />
-          <Line type="monotone" dataKey="backorder" stroke="#dc2626" strokeWidth={2} />
-        </LineChart>
-      </ResponsiveContainer>
+    <div className="role-cost-charts">
+      {histories.map(({ role, data }) => (
+        <article className="role-cost-chart" key={role}>
+          <div className="role-cost-chart-header">
+            <h3>{localizedRoleLabels[language][role]}</h3>
+            <strong>{formatEuro(costs[role], language)}</strong>
+          </div>
+          {data.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="round" />
+                <YAxis allowDecimals={false} width={42} />
+                <Tooltip formatter={(value, name) => formatChartValue(Number(value), String(name), language)} />
+                <Legend />
+                <Line type="monotone" dataKey="cumulativeCost" stroke="#7c3aed" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="roundCost" stroke="#0f766e" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="inventoryCost" stroke="#2563eb" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="backorderCost" stroke="#dc2626" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="muted">{t.statisticsPending}</p>
+          )}
+        </article>
+      ))}
     </div>
   )
 }

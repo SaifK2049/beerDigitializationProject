@@ -233,6 +233,8 @@ export interface RoleStatisticsPoint {
   inventory: number
   backorder: number
   shipped: number
+  inventoryCost: number
+  backorderCost: number
   roundCost: number
   cumulativeCost: number
 }
