@@ -621,6 +621,156 @@ button {
   grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
 }
 
+.progress-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.progress-lane {
+  display: grid;
+  gap: 10px;
+}
+
+.progress-road {
+  background: linear-gradient(90deg, #cbd5e1 50%, transparent 0) repeat-x center / 18px 2px;
+  border-radius: 999px;
+  height: 34px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-road::before,
+.progress-road::after {
+  background: #0f766e;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+  content: '';
+  height: 12px;
+  position: absolute;
+  top: 10px;
+  width: 12px;
+  z-index: 1;
+}
+
+.progress-road::before {
+  left: 0;
+}
+
+.progress-road::after {
+  right: 0;
+}
+
+.progress-truck {
+  color: #0f766e;
+  filter: drop-shadow(0 3px 5px rgba(15, 23, 42, 0.22));
+  left: 0;
+  position: absolute;
+  top: 4px;
+  z-index: 2;
+}
+
+.inbound-truck {
+  animation: drive-inbound 5s linear infinite;
+}
+
+.outbound-truck {
+  animation: drive-outbound 3.5s ease-in-out infinite;
+}
+
+.outbound-lane.delivered .outbound-truck {
+  animation: none;
+  left: calc(100% - 24px);
+}
+
+.outbound-lane.pending .progress-road {
+  opacity: 0.72;
+}
+
+.progress-stages {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.outbound-stages {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.progress-stage {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.progress-stage span,
+.progress-stage em {
+  color: #64748b;
+  display: block;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.progress-stage strong {
+  color: #172033;
+  display: block;
+  font-size: 20px;
+  line-height: 1.1;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.progress-stage-status strong {
+  color: #0f766e;
+}
+
+.theme-dark .progress-road {
+  background-image: linear-gradient(90deg, #64748b 50%, transparent 0);
+}
+
+.theme-dark .progress-road::before,
+.theme-dark .progress-road::after {
+  border-color: #1f2937;
+}
+
+.theme-dark .progress-stage {
+  background: #111827;
+  border-color: #374151;
+}
+
+.theme-dark .progress-stage strong {
+  color: #f9fafb;
+}
+
+.theme-dark .progress-stage span,
+.theme-dark .progress-stage em {
+  color: #9ca3af;
+}
+
+@keyframes drive-inbound {
+  0% {
+    left: 0;
+  }
+  100% {
+    left: calc(100% - 24px);
+  }
+}
+
+@keyframes drive-outbound {
+  0%,
+  20% {
+    left: 0;
+  }
+  85%,
+  100% {
+    left: calc(100% - 24px);
+  }
+}
+
 .recommendation {
   background: #ecfdf5;
   border: 1px solid #bbf7d0;
@@ -861,7 +1011,9 @@ th {
   .metric-grid,
   .role-cost-charts,
   .role-grid,
-  .instruction-grid {
+  .instruction-grid,
+  .progress-stages,
+  .outbound-stages {
     grid-template-columns: 1fr;
   }
 
@@ -882,6 +1034,18 @@ th {
 
   .share-link-row {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inbound-truck,
+  .outbound-truck {
+    animation: none;
+    left: calc(50% - 12px);
+  }
+
+  .outbound-lane.delivered .outbound-truck {
+    left: calc(100% - 24px);
   }
 }
 

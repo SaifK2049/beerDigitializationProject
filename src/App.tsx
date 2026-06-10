@@ -282,6 +282,16 @@ const text = {
     becameUsable: 'units became usable.',
     transportToWareneingang: 'Transport to Wareneingang',
     usableNextRound: 'units will be usable next round.',
+    supplyProgress: 'Supply progress',
+    supplierStage: 'Supplier',
+    transportStage: 'Transport',
+    wareneingangStage: 'Wareneingang',
+    lagerStage: 'Lager',
+    customerStage: 'Customer',
+    inMotion: 'In motion',
+    delivered: 'Delivered',
+    pendingDecision: 'Waiting for decision',
+    outboundDelivery: 'Outbound delivery',
     incomingOrder: 'Incoming order',
     enterPhysicalCard: 'Enter the physical customer card.',
     decisionSupport: 'Decision Support',
@@ -412,6 +422,16 @@ const text = {
     becameUsable: 'Einheiten wurden nutzbar.',
     transportToWareneingang: 'Transport in Wareneingang',
     usableNextRound: 'Einheiten werden naechste Runde nutzbar.',
+    supplyProgress: 'Lieferfortschritt',
+    supplierStage: 'Lieferant',
+    transportStage: 'Transport',
+    wareneingangStage: 'Wareneingang',
+    lagerStage: 'Lager',
+    customerStage: 'Kunde',
+    inMotion: 'In Bewegung',
+    delivered: 'Geliefert',
+    pendingDecision: 'Wartet auf Entscheidung',
+    outboundDelivery: 'Ausgehende Lieferung',
     incomingOrder: 'Eingehender Auftrag',
     enterPhysicalCard: 'Physische Kundenkarte eingeben.',
     decisionSupport: 'Entscheidungsunterstuetzung',
@@ -1109,6 +1129,64 @@ function RoleInstructions({ role, compact = false }: { role: Role; compact?: boo
   )
 }
 
+function SupplyProgressPanel({ state }: { state: RoleRoundState }) {
+  const { language, t } = usePreferences()
+  const inboundStages = [
+    { label: t.supplierStage, value: formatNumber(state.transportBufferBefore, language) },
+    { label: t.transportStage, value: formatNumber(state.materialMovedToWareneingang, language) },
+    { label: t.wareneingangStage, value: formatNumber(state.materialMovedToInventory, language) },
+    { label: t.lagerStage, value: formatNumber(state.startingInventory, language) },
+  ]
+  const outboundQuantity = state.submitted
+    ? state.shippedQuantity ?? 0
+    : state.role === 'retailer'
+      ? 0
+      : getRecommendedDelivery(state)
+  const outboundStatus = state.submitted ? t.delivered : t.pendingDecision
+
+  return (
+    <section className="panel progress-panel" aria-label={t.supplyProgress}>
+      <div className="panel-title">
+        <Truck size={20} />
+        <h2>{t.supplyProgress}</h2>
+      </div>
+      <div className="progress-lane inbound-lane">
+        <div className="progress-road" aria-hidden="true">
+          <Truck className="progress-truck inbound-truck" size={24} />
+        </div>
+        <div className="progress-stages">
+          {inboundStages.map((stage) => (
+            <div className="progress-stage" key={stage.label}>
+              <span>{stage.label}</span>
+              <strong>{stage.value}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className={`progress-lane outbound-lane ${state.submitted ? 'delivered' : 'pending'}`}>
+        <div className="progress-road" aria-hidden="true">
+          <Truck className="progress-truck outbound-truck" size={24} />
+        </div>
+        <div className="progress-stages outbound-stages">
+          <div className="progress-stage">
+            <span>{t.lagerStage}</span>
+            <strong>{formatNumber(state.startingInventory, language)}</strong>
+          </div>
+          <div className="progress-stage progress-stage-status">
+            <span>{t.outboundDelivery}</span>
+            <strong>{formatNumber(outboundQuantity, language)}</strong>
+            <em>{outboundStatus}</em>
+          </div>
+          <div className="progress-stage">
+            <span>{t.customerStage}</span>
+            <strong>{state.submitted ? formatNumber(state.shippedQuantity ?? 0, language) : t.inMotion}</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function RoleView({
   game,
   role,
@@ -1162,6 +1240,8 @@ function RoleView({
         <MetricCard icon={<Truck size={18} />} label={t.transportMoved} value={formatNumber(state.materialMovedToWareneingang, language)} />
         <MetricCard icon={<ClipboardList size={18} />} label={t.recommendation} value={formatNumber(state.recommendedOrderQuantity, language)} />
       </section>
+
+      <SupplyProgressPanel state={state} />
 
       <section className="role-layout">
         <article className="panel">
