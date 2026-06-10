@@ -7,6 +7,7 @@ import {
   startGame,
   submitSimulationRound,
   submitRoleRound,
+  synchronizeSimulationRoundClock,
 } from './engine'
 
 describe('Beer Game round engine', () => {
@@ -159,6 +160,7 @@ describe('Beer Game round engine', () => {
     })
 
     expect(game.config.simulationMode).toBe(true)
+    expect(game.config.roundSeconds).toBe(5)
     expect(game.roleAssignments.every((assignment) => assignment.joinedAt)).toBe(true)
     expect(game.roleAssignments.map((assignment) => assignment.displayName)).toEqual([
       'Bot Retailer',
@@ -181,7 +183,34 @@ describe('Beer Game round engine', () => {
 
     expect(submitted.currentRound).toBe(1)
     expect(submitted.roleRoundStates.filter((state) => state.roundNumber === 1).every((state) => state.submitted)).toBe(true)
-    expect(retailer?.incomingOrder).toBe(8)
+    expect(retailer?.incomingOrder).toBe(5)
     expect(retailer?.submittedBy).toBe('Bot Retailer')
+  })
+
+  it('keeps simulation round deadlines at five seconds for saved games', () => {
+    const game = startGame(
+      createGame({
+        name: 'Simulation',
+        config: { ...defaultGameConfig, simulationMode: true, roundSeconds: 60 },
+      }),
+    )
+    const currentRound = game.rounds[0]
+    const stretchedGame = {
+      ...game,
+      config: { ...game.config, roundSeconds: 60 },
+      rounds: [
+        {
+          ...currentRound,
+          deadlineAt: new Date(new Date(currentRound.startsAt).getTime() + 60_000).toISOString(),
+        },
+      ],
+    }
+
+    const synced = synchronizeSimulationRoundClock(stretchedGame)
+    const syncedRound = synced.rounds[0]
+    const durationMs = new Date(syncedRound.deadlineAt).getTime() - new Date(syncedRound.startsAt).getTime()
+
+    expect(synced.config.roundSeconds).toBe(5)
+    expect(durationMs).toBe(5_000)
   })
 })

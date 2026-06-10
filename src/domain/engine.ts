@@ -35,9 +35,11 @@ export const defaultGameConfig: GameConfig = {
 }
 
 export const simulationCustomerDemandRange = {
-  min: 4,
-  max: 12,
+  min: 2,
+  max: 8,
 }
+
+export const simulationRoundSeconds = 5
 
 export function createGame(input: CreateGameInput): Game {
   const now = new Date().toISOString()
@@ -106,6 +108,34 @@ export function submitSimulationRound(game: Game, random = Math.random): Game {
   })
 }
 
+export function synchronizeSimulationRoundClock(game: Game): Game {
+  if (!game.config.simulationMode) {
+    return game
+  }
+
+  const round = getCurrentRound(game)
+  const nextConfig = { ...game.config, demoMode: false, roundSeconds: simulationRoundSeconds }
+  if (!round || game.status !== 'active') {
+    return game.config.roundSeconds === simulationRoundSeconds && !game.config.demoMode
+      ? game
+      : { ...game, config: nextConfig }
+  }
+
+  const deadlineAt = new Date(new Date(round.startsAt).getTime() + simulationRoundSeconds * 1000).toISOString()
+  const deadlineMatches = round.deadlineAt === deadlineAt
+  if (deadlineMatches && game.config.roundSeconds === simulationRoundSeconds && !game.config.demoMode) {
+    return game
+  }
+
+  return {
+    ...game,
+    config: nextConfig,
+    rounds: game.rounds.map((candidate) =>
+      candidate.roundNumber === round.roundNumber ? { ...candidate, deadlineAt } : candidate,
+    ),
+  }
+}
+
 export function markRoleJoined(game: Game, role: Role, displayName: string): Game {
   const now = new Date().toISOString()
   return {
@@ -128,7 +158,7 @@ export function startGame(game: Game): Game {
   }
 
   const now = new Date()
-  const firstRound = createRound(game.id, 1, now, game.config.roundSeconds)
+  const firstRound = createRound(game.id, 1, now, getRoundSeconds(game.config))
   const states = ROLES.map((role) => createRoleRoundState(game, role, 1))
 
   return appendAudit(
@@ -163,7 +193,7 @@ export function resumeGame(game: Game): Game {
     return game
   }
 
-  const nextDeadline = new Date(Date.now() + game.config.roundSeconds * 1000).toISOString()
+  const nextDeadline = new Date(Date.now() + getRoundSeconds(game.config) * 1000).toISOString()
   const rounds = game.rounds.map((round) =>
     round.roundNumber === game.currentRound ? { ...round, deadlineAt: nextDeadline } : round,
   )
@@ -359,7 +389,7 @@ export function advanceRound(game: Game, advancedBy: string): Game {
   }
 
   const nextRoundNumber = nextGame.currentRound + 1
-  const nextRound = createRound(nextGame.id, nextRoundNumber, new Date(), nextGame.config.roundSeconds)
+  const nextRound = createRound(nextGame.id, nextRoundNumber, new Date(), getRoundSeconds(nextGame.config))
   const nextStates = ROLES.map((role) => createRoleRoundState({ ...nextGame, rounds }, role, nextRoundNumber))
 
   return appendAudit(
@@ -579,6 +609,8 @@ function assertNoInventoryBackorderOverlap(endingInventory: number, endingBackor
 }
 
 function normalizeConfig(config: GameConfig): GameConfig {
+  const simulationMode = Boolean(config.simulationMode)
+
   return {
     ...config,
     inventoryCostPerUnit: Math.max(0, config.inventoryCostPerUnit),
@@ -589,13 +621,18 @@ function normalizeConfig(config: GameConfig): GameConfig {
     targetSafetyStock: Math.max(0, Math.round(config.targetSafetyStock)),
     movingAverageWindow: Math.max(1, Math.round(config.movingAverageWindow)),
     maxRounds: Math.max(1, Math.round(config.maxRounds)),
-    roundSeconds: Math.max(10, Math.round(config.roundSeconds)),
+    roundSeconds: simulationMode ? simulationRoundSeconds : Math.max(10, Math.round(config.roundSeconds)),
     initialIncomingOrder: Math.max(0, Math.round(config.initialIncomingOrder)),
     maxOrderQuantity:
       config.maxOrderQuantity === null ? null : Math.max(0, Math.round(config.maxOrderQuantity)),
+    demoMode: simulationMode ? false : Boolean(config.demoMode),
     demoCustomerDemand: config.demoCustomerDemand.map((value) => Math.max(0, Math.round(value))),
-    simulationMode: Boolean(config.simulationMode),
+    simulationMode,
   }
+}
+
+function getRoundSeconds(config: GameConfig): number {
+  return config.simulationMode ? simulationRoundSeconds : config.roundSeconds
 }
 
 function randomInteger(min: number, max: number, random: () => number): number {

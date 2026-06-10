@@ -284,6 +284,19 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
+input:disabled,
+select:disabled {
+  background: #eef2f7;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.theme-dark input:disabled,
+.theme-dark select:disabled {
+  background: #111827;
+  color: #9ca3af;
+}
+
 .check-row {
   color: #172033;
   flex-direction: row;
@@ -345,6 +358,22 @@ button {
 
 .danger-text {
   color: #b91c1c;
+}
+
+.table-role-button {
+  background: transparent;
+  color: #0f766e;
+  font-weight: 900;
+  padding: 0;
+  text-align: left;
+}
+
+.table-role-button:hover {
+  text-decoration: underline;
+}
+
+.theme-dark .table-role-button {
+  color: #5eead4;
 }
 
 .form-error {

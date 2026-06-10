@@ -3,7 +3,6 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
-  Bot,
   Check,
   ClipboardList,
   Clock3,
@@ -47,6 +46,7 @@ import {
   startGame,
   submitSimulationRound,
   submitRoleRound,
+  synchronizeSimulationRoundClock,
   validateJoin,
 } from './domain/engine'
 import { getChainSummary, getCostByRole, getRoleHistory, exportGameCsv } from './domain/statistics'
@@ -152,7 +152,6 @@ const text = {
     openRole: 'Open role',
     startRoundOne: 'Start round 1',
     startSimulation: 'Start simulation',
-    runBotRound: 'Run bot round',
     roleDashboard: 'Role dashboard',
     transparencyOnly: 'Local structured transparency only.',
     admin: 'Admin',
@@ -263,7 +262,6 @@ const text = {
     openRole: 'Rolle oeffnen',
     startRoundOne: 'Runde 1 starten',
     startSimulation: 'Simulation starten',
-    runBotRound: 'Bot-Runde ausfuehren',
     roleDashboard: 'Rollen-Dashboard',
     transparencyOnly: 'Nur lokale strukturierte Transparenz.',
     admin: 'Admin',
@@ -371,7 +369,16 @@ function App() {
             return game
           }
 
-          const nextGame = maybeAdvanceExpiredRound(game, new Date())
+          const tickTime = new Date()
+          let nextGame = synchronizeSimulationRoundClock(game)
+          if (nextGame.status === 'active' && nextGame.config.simulationMode) {
+            const hasPendingBotState = ROLES.some((role) => !getCurrentRoleState(nextGame, role)?.submitted)
+            if (hasPendingBotState) {
+              nextGame = submitSimulationRound(nextGame)
+            }
+          }
+
+          nextGame = maybeAdvanceExpiredRound(nextGame, tickTime)
           if (nextGame !== game) {
             changedGame = nextGame
           }
@@ -538,7 +545,12 @@ function CreateGamePanel({ onCreate }: { onCreate: (name: string, config: GameCo
         </label>
         <div className="two-col">
           <NumberField label={t.rounds} value={config.maxRounds} onChange={(value) => updateNumber('maxRounds', value)} />
-          <NumberField label={t.roundSeconds} value={config.roundSeconds} onChange={(value) => updateNumber('roundSeconds', value)} />
+          <NumberField
+            label={t.roundSeconds}
+            value={config.simulationMode ? 5 : config.roundSeconds}
+            onChange={(value) => updateNumber('roundSeconds', value)}
+            disabled={config.simulationMode}
+          />
           <NumberField label={t.startingInventory} value={config.startingInventory} onChange={(value) => updateNumber('startingInventory', value)} />
           <NumberField label={t.startingTransport} value={config.startingTransport} onChange={(value) => updateNumber('startingTransport', value)} />
           <NumberField label={t.startingWareneingang} value={config.startingWareneingang} onChange={(value) => updateNumber('startingWareneingang', value)} />
@@ -568,6 +580,7 @@ function CreateGamePanel({ onCreate }: { onCreate: (name: string, config: GameCo
               ...previous,
               simulationMode: event.target.checked,
               demoMode: event.target.checked ? false : previous.demoMode,
+              roundSeconds: event.target.checked ? 5 : Math.max(previous.roundSeconds, 10),
             }))}
           />
           {t.simulationMode}
@@ -684,7 +697,6 @@ function AdminView({
   const summary = getChainSummary(game)
   const costs = getCostByRole(game)
   const roundStates = ROLES.map((role) => getCurrentRoleState(game, role)).filter(Boolean) as RoleRoundState[]
-  const hasPendingRoundState = roundStates.some((state) => !state.submitted)
 
   function downloadCsv() {
     const blob = new Blob([exportGameCsv(game)], { type: 'text/csv;charset=utf-8' })
@@ -741,17 +753,6 @@ function AdminView({
                   {t.advance}
                 </button>
               ) : null}
-              {game.status === 'active' && game.config.simulationMode ? (
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => onUpdate(submitSimulationRound(game))}
-                  disabled={!hasPendingRoundState}
-                >
-                  <Bot size={16} />
-                  {t.runBotRound}
-                </button>
-              ) : null}
               <button className="ghost-button" type="button" onClick={downloadCsv}>
                 <Download size={16} />
                 CSV
@@ -792,7 +793,15 @@ function AdminView({
                 <tbody>
                   {roundStates.map((state) => (
                     <tr key={state.id}>
-                      <td>{localizedRoleLabels[language][state.role]}</td>
+                      <td>
+                        <button
+                          className="table-role-button"
+                          type="button"
+                          onClick={() => onSwitchSession({ gameId: game.id, access: 'role', role: state.role })}
+                        >
+                          {localizedRoleLabels[language][state.role]}
+                        </button>
+                      </td>
                       <td>{state.submitted ? <Check size={16} /> : <Clock3 size={16} />}</td>
                       <td>{state.endingInventory ?? state.startingInventory}</td>
                       <td>{state.endingBackorder ?? state.previousBackorder}</td>
@@ -1190,12 +1199,14 @@ function NumberField({
   onChange,
   step = '1',
   placeholder,
+  disabled = false,
 }: {
   label: string
   value: string | number
   onChange: (value: string) => void
   step?: string
   placeholder?: string
+  disabled?: boolean
 }) {
   return (
     <label>
@@ -1206,6 +1217,7 @@ function NumberField({
         step={step}
         value={value}
         placeholder={placeholder}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       />
     </label>
