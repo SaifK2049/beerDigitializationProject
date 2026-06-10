@@ -5,6 +5,7 @@ import {
   defaultGameConfig,
   getCurrentRoleState,
   startGame,
+  submitSimulationRound,
   submitRoleRound,
 } from './engine'
 
@@ -149,5 +150,38 @@ describe('Beer Game round engine', () => {
     expect(round2Retailer?.submitted).toBe(false)
     expect(timedOutRound?.timedOut).toBe(true)
     expect(timedOutRound?.newOrderToSupplier).toBe(7)
+  })
+
+  it('marks simulation game roles as joined bots', () => {
+    const game = createGame({
+      name: 'Simulation',
+      config: { ...defaultGameConfig, simulationMode: true },
+    })
+
+    expect(game.config.simulationMode).toBe(true)
+    expect(game.roleAssignments.every((assignment) => assignment.joinedAt)).toBe(true)
+    expect(game.roleAssignments.map((assignment) => assignment.displayName)).toEqual([
+      'Bot Retailer',
+      'Bot Wholesaler',
+      'Bot Distributor',
+      'Bot Producer',
+    ])
+  })
+
+  it('fills the current simulation round with bot decisions and random customer demand', () => {
+    const game = startGame(
+      createGame({
+        name: 'Simulation',
+        config: { ...defaultGameConfig, simulationMode: true },
+      }),
+    )
+
+    const submitted = submitSimulationRound(game, () => 0.5)
+    const retailer = getCurrentRoleState(submitted, 'retailer')
+
+    expect(submitted.currentRound).toBe(1)
+    expect(submitted.roleRoundStates.filter((state) => state.roundNumber === 1).every((state) => state.submitted)).toBe(true)
+    expect(retailer?.incomingOrder).toBe(8)
+    expect(retailer?.submittedBy).toBe('Bot Retailer')
   })
 })

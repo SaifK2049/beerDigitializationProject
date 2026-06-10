@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  Bot,
   Check,
   ClipboardList,
   Clock3,
@@ -17,6 +18,7 @@ import {
   Plus,
   RefreshCcw,
   ShieldCheck,
+  Shuffle,
   Sun,
   Truck,
   Users,
@@ -43,6 +45,7 @@ import {
   resetGame,
   resumeGame,
   startGame,
+  submitSimulationRound,
   submitRoleRound,
   validateJoin,
 } from './domain/engine'
@@ -100,6 +103,7 @@ const text = {
     safetyStock: 'Safety stock',
     forecastWindow: 'Forecast window',
     demoMode: 'Demo mode with predefined customer demand',
+    simulationMode: 'Simulation mode with bot roles and random customer demand',
     createClassroomGame: 'Create classroom game',
     joinGame: 'Join Game',
     gameCode: 'Game code',
@@ -147,6 +151,8 @@ const text = {
     joined: 'Joined',
     openRole: 'Open role',
     startRoundOne: 'Start round 1',
+    startSimulation: 'Start simulation',
+    runBotRound: 'Run bot round',
     roleDashboard: 'Role dashboard',
     transparencyOnly: 'Local structured transparency only.',
     admin: 'Admin',
@@ -208,6 +214,7 @@ const text = {
     safetyStock: 'Sicherheitsbestand',
     forecastWindow: 'Prognosefenster',
     demoMode: 'Demo-Modus mit vorgegebener Kundennachfrage',
+    simulationMode: 'Simulationsmodus mit Bot-Rollen und zufaelliger Kundennachfrage',
     createClassroomGame: 'Klassenspiel erstellen',
     joinGame: 'Spiel beitreten',
     gameCode: 'Spielcode',
@@ -255,6 +262,8 @@ const text = {
     joined: 'Beigetreten',
     openRole: 'Rolle oeffnen',
     startRoundOne: 'Runde 1 starten',
+    startSimulation: 'Simulation starten',
+    runBotRound: 'Bot-Runde ausfuehren',
     roleDashboard: 'Rollen-Dashboard',
     transparencyOnly: 'Nur lokale strukturierte Transparenz.',
     admin: 'Admin',
@@ -543,9 +552,25 @@ function CreateGamePanel({ onCreate }: { onCreate: (name: string, config: GameCo
           <input
             type="checkbox"
             checked={config.demoMode}
-            onChange={(event) => setConfig((previous) => ({ ...previous, demoMode: event.target.checked }))}
+            onChange={(event) => setConfig((previous) => ({
+              ...previous,
+              demoMode: event.target.checked,
+              simulationMode: event.target.checked ? false : previous.simulationMode,
+            }))}
           />
           {t.demoMode}
+        </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={config.simulationMode}
+            onChange={(event) => setConfig((previous) => ({
+              ...previous,
+              simulationMode: event.target.checked,
+              demoMode: event.target.checked ? false : previous.demoMode,
+            }))}
+          />
+          {t.simulationMode}
         </label>
         <button className="primary-button" type="submit">
           <Plus size={18} />
@@ -659,6 +684,7 @@ function AdminView({
   const summary = getChainSummary(game)
   const costs = getCostByRole(game)
   const roundStates = ROLES.map((role) => getCurrentRoleState(game, role)).filter(Boolean) as RoleRoundState[]
+  const hasPendingRoundState = roundStates.some((state) => !state.submitted)
 
   function downloadCsv() {
     const blob = new Blob([exportGameCsv(game)], { type: 'text/csv;charset=utf-8' })
@@ -713,6 +739,17 @@ function AdminView({
                 <button className="ghost-button" type="button" onClick={() => onUpdate(advanceRound(game, 'admin'))}>
                   <Clock3 size={16} />
                   {t.advance}
+                </button>
+              ) : null}
+              {game.status === 'active' && game.config.simulationMode ? (
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => onUpdate(submitSimulationRound(game))}
+                  disabled={!hasPendingRoundState}
+                >
+                  <Bot size={16} />
+                  {t.runBotRound}
                 </button>
               ) : null}
               <button className="ghost-button" type="button" onClick={downloadCsv}>
@@ -830,8 +867,8 @@ function LobbyPanel({
         ))}
       </div>
       <button className="primary-button" type="button" onClick={onStart}>
-        <Play size={18} />
-        {t.startRoundOne}
+        {game.config.simulationMode ? <Shuffle size={18} /> : <Play size={18} />}
+        {game.config.simulationMode ? t.startSimulation : t.startRoundOne}
       </button>
     </section>
   )

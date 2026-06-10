@@ -1,6 +1,7 @@
 import { buildRecommendation } from './recommendation'
 import {
   ROLES,
+  compactRoleLabels,
   downstreamRole,
   upstreamRole,
   type AuditLog,
@@ -30,22 +31,29 @@ export const defaultGameConfig: GameConfig = {
   timeoutFallback: 'previous_order_or_zero',
   demoMode: false,
   demoCustomerDemand: [4, 4, 4, 4, 8, 8, 8, 8, 4, 4, 4, 4],
+  simulationMode: false,
+}
+
+export const simulationCustomerDemandRange = {
+  min: 4,
+  max: 12,
 }
 
 export function createGame(input: CreateGameInput): Game {
   const now = new Date().toISOString()
   const id = createId('game')
+  const config = normalizeConfig(input.config)
   const game: Game = {
     id,
     code: createGameCode(),
     name: input.name.trim() || 'Beer Game',
     status: 'lobby',
     currentRound: 0,
-    maxRounds: input.config.maxRounds,
+    maxRounds: config.maxRounds,
     adminPin: 'ADMIN',
     transparencyLevel: 'local_structured',
-    config: normalizeConfig(input.config),
-    roleAssignments: createDefaultAssignments(id),
+    config,
+    roleAssignments: createDefaultAssignments(id, config.simulationMode, now),
     rounds: [],
     roleRoundStates: [],
     orders: [],
@@ -61,6 +69,40 @@ export function createGame(input: CreateGameInput): Game {
   return appendAudit(game, 'system', 'create_game', 'game', id, null, {
     code: game.code,
     config: game.config,
+  })
+}
+
+export function submitSimulationRound(game: Game, random = Math.random): Game {
+  if (game.status !== 'active') {
+    return game
+  }
+
+  const customerDemand = randomInteger(
+    simulationCustomerDemandRange.min,
+    simulationCustomerDemandRange.max,
+    random,
+  )
+  let nextGame = game
+
+  for (const role of ROLES) {
+    const state = getCurrentRoleState(nextGame, role)
+    if (!state || state.submitted) {
+      continue
+    }
+
+    nextGame = submitRoleRound({
+      game: nextGame,
+      role,
+      submittedBy: `Bot ${compactRoleLabels[role]}`,
+      incomingOrder: role === 'retailer' ? customerDemand : undefined,
+      newOrderToSupplier: role === 'producer' ? 0 : state.recommendedOrderQuantity,
+      autoAdvance: false,
+    })
+  }
+
+  return appendAudit(nextGame, 'simulation', 'submit_bot_round', 'round', String(game.currentRound), null, {
+    round: game.currentRound,
+    customerDemand,
   })
 }
 
@@ -444,7 +486,7 @@ function createRound(gameId: string, roundNumber: number, startsAt: Date, roundS
   }
 }
 
-function createDefaultAssignments(gameId: string): RoleAssignment[] {
+function createDefaultAssignments(gameId: string, simulationMode: boolean, joinedAt: string): RoleAssignment[] {
   const pins: Record<Role, string> = {
     retailer: '1111',
     wholesaler: '2222',
@@ -455,9 +497,9 @@ function createDefaultAssignments(gameId: string): RoleAssignment[] {
   return ROLES.map((role) => ({
     gameId,
     role,
-    displayName: '',
+    displayName: simulationMode ? `Bot ${compactRoleLabels[role]}` : '',
     pin: pins[role],
-    joinedAt: null,
+    joinedAt: simulationMode ? joinedAt : null,
   }))
 }
 
@@ -552,7 +594,12 @@ function normalizeConfig(config: GameConfig): GameConfig {
     maxOrderQuantity:
       config.maxOrderQuantity === null ? null : Math.max(0, Math.round(config.maxOrderQuantity)),
     demoCustomerDemand: config.demoCustomerDemand.map((value) => Math.max(0, Math.round(value))),
+    simulationMode: Boolean(config.simulationMode),
   }
+}
+
+function randomInteger(min: number, max: number, random: () => number): number {
+  return Math.floor(random() * (max - min + 1)) + min
 }
 
 function appendAudit(

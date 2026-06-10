@@ -50,6 +50,7 @@ export interface GameConfig {
   timeoutFallback: 'previous_order_or_zero'
   demoMode: boolean
   demoCustomerDemand: number[]
+  simulationMode: boolean
 }
 
 export interface RoleAssignment {
