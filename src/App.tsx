@@ -253,6 +253,9 @@ const text = {
     chainInventory: 'Chain inventory',
     chainBackorder: 'Chain backorder',
     bullwhipRatio: 'Bullwhip ratio',
+    csvScope: 'CSV scope',
+    allPlayers: 'All players',
+    downloadCsv: 'Download CSV',
     currentRoundState: 'Current Round State',
     submitted: 'Submitted',
     inventory: 'Inventory',
@@ -393,6 +396,9 @@ const text = {
     chainInventory: 'Bestand der Kette',
     chainBackorder: 'Rueckstand der Kette',
     bullwhipRatio: 'Bullwhip-Faktor',
+    csvScope: 'CSV-Auswahl',
+    allPlayers: 'Alle Spieler',
+    downloadCsv: 'CSV herunterladen',
     currentRoundState: 'Aktueller Rundenstatus',
     submitted: 'Abgegeben',
     inventory: 'Bestand',
@@ -879,6 +885,7 @@ function AdminView({
 }) {
   const { language, t } = usePreferences()
   const [linkCopied, setLinkCopied] = useState(false)
+  const [csvScope, setCsvScope] = useState<Role | 'all'>('all')
   const currentRound = getCurrentRound(game)
   const summary = getChainSummary(game)
   const costs = getCostByRole(game)
@@ -886,11 +893,11 @@ function AdminView({
   const sharedJoinUrl = buildSharedJoinUrl(game.code)
 
   function downloadCsv() {
-    const blob = new Blob([exportGameCsv(game)], { type: 'text/csv;charset=utf-8' })
+    const blob = new Blob([exportGameCsv(game, csvScope)], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = `${game.code}-beer-game-results.csv`
+    anchor.download = `${game.code}-${csvScope}-beer-game-results.csv`
     anchor.click()
     URL.revokeObjectURL(url)
   }
@@ -957,9 +964,21 @@ function AdminView({
                   {t.advance}
                 </button>
               ) : null}
+              <label className="compact-select csv-scope-select">
+                <Download size={16} />
+                <span className="sr-only">{t.csvScope}</span>
+                <select value={csvScope} onChange={(event) => setCsvScope(event.target.value as Role | 'all')}>
+                  <option value="all">{t.allPlayers}</option>
+                  {ROLES.map((role) => (
+                    <option value={role} key={role}>
+                      {localizedRoleLabels[language][role]}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button className="ghost-button" type="button" onClick={downloadCsv}>
                 <Download size={16} />
-                CSV
+                {t.downloadCsv}
               </button>
               <button className="ghost-button danger-text" type="button" onClick={() => onUpdate(resetGame(game))}>
                 <RefreshCcw size={16} />

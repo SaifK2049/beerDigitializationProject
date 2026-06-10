@@ -62,7 +62,7 @@ export function getChainSummary(game: Game) {
   }
 }
 
-export function exportGameCsv(game: Game): string {
+export function exportGameCsv(game: Game, roleFilter: Role | 'all' = 'all'): string {
   const rows = [
     [
       'game_code',
@@ -83,7 +83,11 @@ export function exportGameCsv(game: Game): string {
     ],
   ]
 
-  for (const state of [...game.roleRoundStates].sort(
+  const states = roleFilter === 'all'
+    ? game.roleRoundStates
+    : game.roleRoundStates.filter((state) => state.role === roleFilter)
+
+  for (const state of [...states].sort(
     (a, b) => a.roundNumber - b.roundNumber || a.role.localeCompare(b.role),
   )) {
     rows.push([

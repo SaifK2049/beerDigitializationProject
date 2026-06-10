@@ -1,6 +1,6 @@
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { Game } from '../domain/types'
-import { loadGames, replaceGame, saveGames } from './localStore'
+import { loadGames, replaceGame, sanitizeGames, saveGames } from './localStore'
 import { supabase } from './supabase'
 
 const GAME_DOCUMENTS_TABLE = 'game_documents'
@@ -27,7 +27,7 @@ export async function loadPersistedGames(): Promise<Game[]> {
     return loadGames()
   }
 
-  const games = (data ?? []).map((row) => row.payload as Game)
+  const games = sanitizeGames((data ?? []).map((row) => row.payload))
   saveGames(games)
   return games
 }
@@ -65,7 +65,7 @@ export function subscribeToGames(onGameChange: (game: Game) => void): () => void
       { event: '*', schema: 'public', table: GAME_DOCUMENTS_TABLE },
       (payload) => {
         const row = (payload.new || payload.old) as Partial<GameDocumentRow>
-        if (row.payload) {
+        if (row.payload && sanitizeGames([row.payload]).length > 0) {
           onGameChange(row.payload)
         }
       },
