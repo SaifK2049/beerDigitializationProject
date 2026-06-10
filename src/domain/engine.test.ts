@@ -4,10 +4,12 @@ import {
   createGame,
   defaultGameConfig,
   getCurrentRoleState,
+  markRoleJoined,
   startGame,
   submitSimulationRound,
   submitRoleRound,
   synchronizeSimulationRoundClock,
+  validateJoin,
 } from './engine'
 import { buildRecommendation, getEffectiveOrderCap } from './recommendation'
 import type { RoleRoundState } from './types'
@@ -314,6 +316,18 @@ describe('Beer Game round engine', () => {
     ])
   })
 
+  it('makes a player role unavailable immediately after it is joined', () => {
+    const game = createGame({ name: 'Join lock', config: defaultGameConfig })
+
+    expect(validateJoin(game, 'retailer', '1111')).toBe(true)
+
+    const joined = markRoleJoined(game, 'retailer', 'Player One')
+
+    expect(validateJoin(joined, 'retailer', '1111')).toBe(false)
+    expect(joined.roleAssignments.find((assignment) => assignment.role === 'retailer')?.displayName).toBe('Player One')
+    expect(() => markRoleJoined(joined, 'retailer', 'Player Two')).toThrow('Retailer is already taken.')
+  })
+
   it('fills the current simulation round with bot decisions and random customer demand', () => {
     const game = startGame(
       createGame({
@@ -444,6 +458,68 @@ describe('Beer Game round engine', () => {
     })
 
     expect(getCurrentRoleState(submittedAtCap, 'retailer')?.newOrderToSupplier).toBe(5)
+  })
+
+  it('allows upstream roles to choose a valid delivery quantity', () => {
+    const game = startGame(
+      createGame({
+        name: 'Manual delivery',
+        config: { ...defaultGameConfig, startingInventory: 10, startingTransport: 0, startingWareneingang: 0 },
+      }),
+    )
+
+    const submitted = submitRoleRound({
+      game,
+      role: 'wholesaler',
+      submittedBy: 'test',
+      shippedQuantity: 2,
+      newOrderToSupplier: 4,
+      autoAdvance: false,
+    })
+    const wholesaler = getCurrentRoleState(submitted, 'wholesaler')
+
+    expect(wholesaler?.incomingOrder).toBe(4)
+    expect(wholesaler?.shippedQuantity).toBe(2)
+    expect(wholesaler?.endingBackorder).toBe(2)
+    expect(wholesaler?.endingInventory).toBe(8)
+  })
+
+  it('rejects delivery quantities above inventory or downstream demand', () => {
+    const game = startGame(
+      createGame({
+        name: 'Delivery validation',
+        config: { ...defaultGameConfig, startingInventory: 3, startingTransport: 0, startingWareneingang: 0 },
+      }),
+    )
+
+    expect(() =>
+      submitRoleRound({
+        game,
+        role: 'wholesaler',
+        submittedBy: 'test',
+        shippedQuantity: 4,
+        newOrderToSupplier: 0,
+        autoAdvance: false,
+      }),
+    ).toThrow('Delivery quantity must be 3 or lower because that is the usable Lager.')
+
+    const enoughInventory = startGame(
+      createGame({
+        name: 'Demand validation',
+        config: { ...defaultGameConfig, startingInventory: 10, startingTransport: 0, startingWareneingang: 0 },
+      }),
+    )
+
+    expect(() =>
+      submitRoleRound({
+        game: enoughInventory,
+        role: 'wholesaler',
+        submittedBy: 'test',
+        shippedQuantity: 5,
+        newOrderToSupplier: 0,
+        autoAdvance: false,
+      }),
+    ).toThrow('Delivery quantity must be 4 or lower because that is the downstream order plus backorder.')
   })
 
   it('caps timeout fallback orders from older saved state', () => {

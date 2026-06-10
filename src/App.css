@@ -443,13 +443,15 @@ button {
 .theme-dark .mini-card,
 .theme-dark .role-cost-chart,
 .theme-dark .role-card,
-.theme-dark .info-box {
+.theme-dark .info-box,
+.theme-dark .instruction-box {
   background: #111827;
   border-color: #374151;
 }
 
 .theme-dark .saved-game,
 .theme-dark .info-box,
+.theme-dark .instruction-box,
 .theme-dark .role-card p {
   color: #d1d5db;
 }
@@ -466,6 +468,19 @@ button {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+.share-link-row {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  margin-top: 14px;
+  max-width: 760px;
+}
+
+.share-link-row input {
+  font-size: 13px;
 }
 
 .code-strip span,
@@ -644,8 +659,14 @@ button {
 }
 
 .recommendation p,
-.warning p {
+.warning p,
+.instruction-grid p,
+.instruction-goal {
   margin: 0;
+}
+
+.compact-recommendation strong {
+  font-size: 28px;
 }
 
 .info-box {
@@ -654,6 +675,70 @@ button {
   border-radius: 6px;
   color: #334155;
   padding: 12px;
+}
+
+.form-note {
+  font-size: 13px;
+  margin: -6px 0 0;
+}
+
+.instruction-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  color: #334155;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.instruction-box.compact {
+  gap: 10px;
+  padding: 12px;
+}
+
+.instruction-title {
+  margin-bottom: 0;
+}
+
+.instruction-title h2 {
+  font-size: 18px;
+}
+
+.instruction-box.compact .instruction-title h2 {
+  font-size: 15px;
+}
+
+.instruction-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.instruction-grid span {
+  color: #64748b;
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.instruction-grid p {
+  line-height: 1.45;
+}
+
+.instruction-goal {
+  line-height: 1.5;
+}
+
+.instruction-box h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.instruction-box .workflow-list {
+  margin-bottom: 0;
 }
 
 .warning-list {
@@ -775,7 +860,8 @@ th {
   .role-layout,
   .metric-grid,
   .role-cost-charts,
-  .role-grid {
+  .role-grid,
+  .instruction-grid {
     grid-template-columns: 1fr;
   }
 
@@ -792,6 +878,10 @@ th {
   .hero-actions,
   .round-meta {
     flex-wrap: wrap;
+  }
+
+  .share-link-row {
+    grid-template-columns: 1fr;
   }
 }
 

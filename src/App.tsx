@@ -3,9 +3,11 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  BookOpen,
   Check,
   ClipboardList,
   Clock3,
+  Copy,
   Download,
   Factory,
   Languages,
@@ -81,6 +83,104 @@ const localizedRoleLabels: Record<Language, Record<Role, string>> = {
   },
 }
 
+const roleInstructions: Record<
+  Language,
+  Record<Role, { upstreamSupplier: string; downstreamCustomer: string; goal: string; steps: string[] }>
+> = {
+  en: {
+    retailer: {
+      upstreamSupplier: 'Upstream supplier: Wholesaler. Orders you place now become visible to the wholesaler next round.',
+      downstreamCustomer: 'Downstream customer: the physical customer card. You manually enter this demand each round.',
+      goal: 'Keep enough usable Lager to satisfy the customer while avoiding unnecessary inventory and backorder cost.',
+      steps: [
+        'Read the physical customer card and enter that exact customer order.',
+        'Review usable Lager, previous backorder, and inventory moving from Wareneingang and Transport.',
+        'Choose a new order to the wholesaler. The suggested order is a recommendation, not a forced value.',
+        'Submit once. Your round locks immediately after submission.',
+      ],
+    },
+    wholesaler: {
+      upstreamSupplier: 'Upstream supplier: Distributor. Orders you place now become visible to the distributor next round.',
+      downstreamCustomer: 'Downstream customer: Retailer. The incoming order is the retailer order from the previous round.',
+      goal: 'Deliver to the retailer from usable Lager, then order enough from the distributor to recover demand without overreacting.',
+      steps: [
+        'Check the retailer incoming order and any previous backorder you still owe.',
+        'Choose how much to deliver to the retailer. The recommended delivery is the maximum sensible shipment from usable Lager against current demand.',
+        'Choose a new order to the distributor using the recommendation and your local pipeline.',
+        'Submit once. Your round locks immediately after submission.',
+      ],
+    },
+    distributor: {
+      upstreamSupplier: 'Upstream supplier: Production. Orders you place now become visible to production next round.',
+      downstreamCustomer: 'Downstream customer: Wholesaler. The incoming order is the wholesaler order from the previous round.',
+      goal: 'Deliver to the wholesaler from usable Lager and order from production based on your local demand signal and pipeline.',
+      steps: [
+        'Check the wholesaler incoming order and any previous backorder you still owe.',
+        'Choose how much to deliver to the wholesaler. The recommended delivery is capped by usable Lager and total downstream demand.',
+        'Choose a new order to production using the recommendation and your local pipeline.',
+        'Submit once. Your round locks immediately after submission.',
+      ],
+    },
+    producer: {
+      upstreamSupplier: 'Upstream supplier: internal production source. There is no external supplier to order from.',
+      downstreamCustomer: 'Downstream customer: Distributor. The incoming order is the distributor order from the previous round.',
+      goal: 'Use available production stock to deliver to the distributor while controlling unsold inventory cost.',
+      steps: [
+        'Check the distributor incoming order and any previous backorder you still owe.',
+        'Choose how much to deliver to the distributor. The recommended delivery is capped by usable production stock and total downstream demand.',
+        'There is no upstream order field because production has no external supplier.',
+        'Submit once. Your round locks immediately after submission.',
+      ],
+    },
+  },
+  de: {
+    retailer: {
+      upstreamSupplier: 'Vorgelagerter Lieferant: Grosshandel. Deine Bestellung wird in der naechsten Runde beim Grosshandel sichtbar.',
+      downstreamCustomer: 'Nachgelagerter Kunde: physische Kundenkarte. Du gibst diese Nachfrage jede Runde manuell ein.',
+      goal: 'Halte genug nutzbares Lager fuer den Kunden, ohne unnoetige Lager- oder Rueckstandskosten zu erzeugen.',
+      steps: [
+        'Lies die physische Kundenkarte und gib die Nachfrage exakt ein.',
+        'Pruefe nutzbares Lager, vorherigen Rueckstand sowie Material aus Wareneingang und Transport.',
+        'Waehle eine neue Bestellung an den Grosshandel. Der Vorschlag ist eine Empfehlung, kein Pflichtwert.',
+        'Gib einmal ab. Deine Runde wird direkt gesperrt.',
+      ],
+    },
+    wholesaler: {
+      upstreamSupplier: 'Vorgelagerter Lieferant: Distribution. Deine Bestellung wird in der naechsten Runde bei der Distribution sichtbar.',
+      downstreamCustomer: 'Nachgelagerter Kunde: Einzelhandel. Der eingehende Auftrag ist die Bestellung des Einzelhandels aus der vorherigen Runde.',
+      goal: 'Liefere aus nutzbarem Lager an den Einzelhandel und bestelle genug bei der Distribution, ohne zu ueberreagieren.',
+      steps: [
+        'Pruefe den eingehenden Auftrag des Einzelhandels und deinen vorherigen Rueckstand.',
+        'Waehle, wie viel du an den Einzelhandel lieferst. Die empfohlene Lieferung ist die sinnvolle Maximalmenge aus nutzbarem Lager gegen die aktuelle Nachfrage.',
+        'Waehle eine neue Bestellung an die Distribution mit Empfehlung und lokaler Pipeline.',
+        'Gib einmal ab. Deine Runde wird direkt gesperrt.',
+      ],
+    },
+    distributor: {
+      upstreamSupplier: 'Vorgelagerter Lieferant: Produktion. Deine Bestellung wird in der naechsten Runde bei der Produktion sichtbar.',
+      downstreamCustomer: 'Nachgelagerter Kunde: Grosshandel. Der eingehende Auftrag ist die Bestellung des Grosshandels aus der vorherigen Runde.',
+      goal: 'Liefere aus nutzbarem Lager an den Grosshandel und bestelle bei der Produktion nach lokalem Bedarf und Pipeline.',
+      steps: [
+        'Pruefe den eingehenden Auftrag des Grosshandels und deinen vorherigen Rueckstand.',
+        'Waehle, wie viel du an den Grosshandel lieferst. Die empfohlene Lieferung ist durch nutzbares Lager und gesamte Nachfrage begrenzt.',
+        'Waehle eine neue Bestellung an die Produktion mit Empfehlung und lokaler Pipeline.',
+        'Gib einmal ab. Deine Runde wird direkt gesperrt.',
+      ],
+    },
+    producer: {
+      upstreamSupplier: 'Vorgelagerter Lieferant: interne Produktion. Es gibt keinen externen Lieferanten fuer Bestellungen.',
+      downstreamCustomer: 'Nachgelagerter Kunde: Distribution. Der eingehende Auftrag ist die Bestellung der Distribution aus der vorherigen Runde.',
+      goal: 'Nutze verfuegbaren Produktionsbestand fuer Lieferungen an die Distribution und kontrolliere unverkaufte Lagerkosten.',
+      steps: [
+        'Pruefe den eingehenden Auftrag der Distribution und deinen vorherigen Rueckstand.',
+        'Waehle, wie viel du an die Distribution lieferst. Die empfohlene Lieferung ist durch Produktionsbestand und gesamte Nachfrage begrenzt.',
+        'Es gibt kein Bestellfeld nach oben, weil Produktion keinen externen Lieferanten hat.',
+        'Gib einmal ab. Deine Runde wird direkt gesperrt.',
+      ],
+    },
+  },
+}
+
 const text = {
   en: {
     appEyebrow: 'Digitalization Project Supply Chain',
@@ -109,6 +209,10 @@ const text = {
     createClassroomGame: 'Create classroom game',
     joinGame: 'Join Game',
     gameCode: 'Game code',
+    playerJoinLink: 'Player join link',
+    playerJoinLinkHelp: 'Share this link with players. It opens the join screen with the game code already filled in.',
+    copyLink: 'Copy link',
+    copied: 'Copied',
     role: 'Role',
     pin: 'PIN',
     displayName: 'Display name',
@@ -117,12 +221,22 @@ const text = {
     gameCodeMissing: 'Game code not found in this browser.',
     joinFailed: 'Could not join game.',
     invalidJoin: 'Invalid game code, role, or PIN.',
+    roleUnavailable: 'That role is already taken.',
+    availableRolesOnly: 'Only available roles can be joined. Admin access is not available from the player join screen.',
     localGames: 'Local games',
     ruleGuardrails: 'Rule Guardrails',
     retailerPhysicalRule: 'Retailer enters physical customer demand manually each round.',
     structuredRule: 'Roles see only local structured state, history, pipeline, costs, and recommendations.',
     noChatRule: 'No chat, notes, or cross-role free text exists in the app.',
     delayRule: 'Material delay uses Transport, Wareneingang, then usable Lager inventory.',
+    roleInstructions: 'Role instructions',
+    howGameWorks: 'How the game works',
+    yourSupplier: 'Your upstream supplier',
+    yourCustomer: 'Your downstream customer',
+    yourGoal: 'Your goal',
+    roundSteps: 'Round steps',
+    available: 'Available',
+    taken: 'Taken',
     resetLocalData: 'Reset local demo data',
     adminPin: 'Admin PIN',
     lobby: 'Lobby',
@@ -187,6 +301,9 @@ const text = {
     timeout: 'Timeout',
     physicalCustomerOrder: 'Physical customer order',
     newOrderToSupplier: 'New order to upstream supplier',
+    deliveryQuantity: 'Delivery to downstream customer',
+    recommendedDelivery: 'Recommended delivery',
+    deliveryHelp: 'Recommended delivery equals the most you can sensibly ship now: incoming downstream order plus backorder, capped by usable Lager.',
     producerUnlimited: 'Producer has no upstream supplier. Unsold production stock still creates inventory cost.',
     submitAndLock: 'Submit and lock round',
     submitFailed: 'Could not submit this round.',
@@ -222,6 +339,10 @@ const text = {
     createClassroomGame: 'Klassenspiel erstellen',
     joinGame: 'Spiel beitreten',
     gameCode: 'Spielcode',
+    playerJoinLink: 'Spieler-Beitrittslink',
+    playerJoinLinkHelp: 'Teile diesen Link mit Spielern. Er oeffnet den Beitritt mit vorausgefuelltem Spielcode.',
+    copyLink: 'Link kopieren',
+    copied: 'Kopiert',
     role: 'Rolle',
     pin: 'PIN',
     displayName: 'Anzeigename',
@@ -230,12 +351,22 @@ const text = {
     gameCodeMissing: 'Spielcode wurde in diesem Browser nicht gefunden.',
     joinFailed: 'Beitritt nicht moeglich.',
     invalidJoin: 'Ungueltiger Spielcode, Rolle oder PIN.',
+    roleUnavailable: 'Diese Rolle ist bereits vergeben.',
+    availableRolesOnly: 'Nur freie Rollen koennen beitreten. Admin-Zugang ist nicht im Spieler-Beitritt verfuegbar.',
     localGames: 'Lokale Spiele',
     ruleGuardrails: 'Spielregeln',
     retailerPhysicalRule: 'Der Einzelhandel gibt die physische Kundennachfrage jede Runde manuell ein.',
     structuredRule: 'Rollen sehen nur eigene strukturierte Daten, Verlauf, Pipeline, Kosten und Empfehlungen.',
     noChatRule: 'Es gibt keinen Chat, keine Notizen und keine freie Kommunikation zwischen Rollen.',
     delayRule: 'Material laeuft ueber Transport, Wareneingang und danach nutzbares Lager.',
+    roleInstructions: 'Rollenanleitung',
+    howGameWorks: 'So funktioniert das Spiel',
+    yourSupplier: 'Dein vorgelagerter Lieferant',
+    yourCustomer: 'Dein nachgelagerter Kunde',
+    yourGoal: 'Dein Ziel',
+    roundSteps: 'Rundenschritte',
+    available: 'Frei',
+    taken: 'Vergeben',
     resetLocalData: 'Lokale Demo-Daten zuruecksetzen',
     adminPin: 'Admin-PIN',
     lobby: 'Lobby',
@@ -300,6 +431,9 @@ const text = {
     timeout: 'Zeitablauf',
     physicalCustomerOrder: 'Physischer Kundenauftrag',
     newOrderToSupplier: 'Neue Bestellung an vorgelagerte Rolle',
+    deliveryQuantity: 'Lieferung an nachgelagerten Kunden',
+    recommendedDelivery: 'Empfohlene Lieferung',
+    deliveryHelp: 'Die empfohlene Lieferung ist die sinnvolle Maximalmenge: eingehender Auftrag plus Rueckstand, begrenzt durch nutzbares Lager.',
     producerUnlimited: 'Produktion hat keine vorgelagerte Rolle. Ungenutzter Produktionsbestand verursacht Lagerkosten.',
     submitAndLock: 'Runde abgeben und sperren',
     submitFailed: 'Diese Runde konnte nicht abgegeben werden.',
@@ -337,12 +471,25 @@ function loadTheme(): ThemeMode {
   return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'
 }
 
+function getSharedJoinCode(): string {
+  return new URLSearchParams(window.location.search).get('join')?.trim().toUpperCase() ?? ''
+}
+
+function buildSharedJoinUrl(code: string): string {
+  const url = new URL(window.location.href)
+  url.search = ''
+  url.hash = ''
+  url.searchParams.set('join', code)
+  return url.toString()
+}
+
 function App() {
   const [games, setGames] = useState<Game[]>(() => loadGames())
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [language, setLanguageState] = useState<Language>(() => loadLanguage())
   const [theme, setThemeState] = useState<ThemeMode>(() => loadTheme())
   const [now, setNow] = useState(() => Date.now())
+  const sharedJoinCode = getSharedJoinCode()
   const currentGame = games.find((game) => game.id === session?.gameId) ?? null
 
   useEffect(() => saveGames(games), [games])
@@ -415,14 +562,10 @@ function App() {
     setSession({ gameId: game.id, access: 'admin' })
   }
 
-  function handleJoin(game: Game, role: Role | 'admin', pin: string, displayName: string) {
+  function handleJoin(game: Game, role: Role, pin: string, displayName: string) {
     if (!validateJoin(game, role, pin)) {
-      throw new Error(text[language].invalidJoin as string)
-    }
-
-    if (role === 'admin') {
-      setSession({ gameId: game.id, access: 'admin' })
-      return
+      const roleAssignment = game.roleAssignments.find((assignment) => assignment.role === role)
+      throw new Error(roleAssignment?.joinedAt ? text[language].roleUnavailable as string : text[language].invalidJoin as string)
     }
 
     const joinedGame = markRoleJoined(game, role, displayName)
@@ -462,6 +605,7 @@ function App() {
         {!currentGame || !session ? (
           <Home
             games={games}
+            initialJoinCode={sharedJoinCode}
             onCreate={handleCreateGame}
             onJoin={handleJoin}
             onClearLocalData={handleClearLocalData}
@@ -479,7 +623,6 @@ function App() {
             role={session.role}
             now={now}
             onUpdate={upsertGame}
-            onSwitchSession={setSession}
           />
         ) : null}
       </main>
@@ -489,13 +632,15 @@ function App() {
 
 function Home({
   games,
+  initialJoinCode,
   onCreate,
   onJoin,
   onClearLocalData,
 }: {
   games: Game[]
+  initialJoinCode: string
   onCreate: (name: string, config: GameConfig) => void
-  onJoin: (game: Game, role: Role | 'admin', pin: string, displayName: string) => void
+  onJoin: (game: Game, role: Role, pin: string, displayName: string) => void
   onClearLocalData: () => void
 }) {
   const { t } = usePreferences()
@@ -503,7 +648,7 @@ function Home({
   return (
     <div className="home-grid">
       <CreateGamePanel onCreate={onCreate} />
-      <JoinGamePanel games={games} onJoin={onJoin} />
+      <JoinGamePanel games={games} initialCode={initialJoinCode} onJoin={onJoin} />
       <section className="panel project-panel">
         <div className="panel-title">
           <ShieldCheck size={20} />
@@ -608,29 +753,38 @@ function CreateGamePanel({ onCreate }: { onCreate: (name: string, config: GameCo
 
 function JoinGamePanel({
   games,
+  initialCode,
   onJoin,
 }: {
   games: Game[]
-  onJoin: (game: Game, role: Role | 'admin', pin: string, displayName: string) => void
+  initialCode: string
+  onJoin: (game: Game, role: Role, pin: string, displayName: string) => void
 }) {
   const { language, t } = usePreferences()
-  const [code, setCode] = useState(games[0]?.code ?? '')
-  const [role, setRole] = useState<Role | 'admin'>('retailer')
+  const [code, setCode] = useState(initialCode || games[0]?.code || '')
+  const [role, setRole] = useState<Role>('retailer')
   const [pin, setPin] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [error, setError] = useState('')
+  const selectedGame = games.find((candidate) => candidate.code === code.trim().toUpperCase())
+  const availableRoles = selectedGame?.roleAssignments.filter((assignment) => !assignment.joinedAt).map((assignment) => assignment.role) ?? ROLES
+  const selectedAssignment = selectedGame?.roleAssignments.find((assignment) => assignment.role === role)
+  const selectedRoleTaken = Boolean(selectedAssignment?.joinedAt)
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError('')
-    const game = games.find((candidate) => candidate.code === code.trim().toUpperCase())
-    if (!game) {
+    if (!selectedGame) {
       setError(t.gameCodeMissing)
+      return
+    }
+    if (selectedRoleTaken || availableRoles.length === 0) {
+      setError(t.roleUnavailable)
       return
     }
 
     try {
-      onJoin(game, role, pin, displayName)
+      onJoin(selectedGame, role, pin, displayName)
     } catch (joinError) {
       setError(joinError instanceof Error ? joinError.message : t.joinFailed)
     }
@@ -653,27 +807,26 @@ function JoinGamePanel({
         </label>
         <label>
           {t.role}
-          <select value={role} onChange={(event) => setRole(event.target.value as Role | 'admin')}>
-            <option value="admin">{t.adminEvaluator}</option>
+          <select value={role} onChange={(event) => setRole(event.target.value as Role)}>
             {ROLES.map((candidate) => (
-              <option value={candidate} key={candidate}>
-                {localizedRoleLabels[language][candidate]}
+              <option value={candidate} key={candidate} disabled={Boolean(selectedGame?.roleAssignments.find((assignment) => assignment.role === candidate)?.joinedAt)}>
+                {localizedRoleLabels[language][candidate]} {selectedGame ? `- ${selectedGame.roleAssignments.find((assignment) => assignment.role === candidate)?.joinedAt ? t.taken : t.available}` : ''}
               </option>
             ))}
           </select>
         </label>
+        <p className="muted form-note">{t.availableRolesOnly}</p>
         <label>
           {t.pin}
           <input value={pin} onChange={(event) => setPin(event.target.value)} placeholder={t.pin} />
         </label>
-        {role !== 'admin' ? (
-          <label>
-            {t.displayName}
-            <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
-          </label>
-        ) : null}
+        <label>
+          {t.displayName}
+          <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+        </label>
+        <RoleInstructions role={role} compact />
         {error ? <p className="form-error">{error}</p> : null}
-        <button className="primary-button" type="submit">
+        <button className="primary-button" type="submit" disabled={selectedRoleTaken || availableRoles.length === 0}>
           <Play size={18} />
           {t.join}
         </button>
@@ -705,10 +858,12 @@ function AdminView({
   onSwitchSession: (session: Session) => void
 }) {
   const { language, t } = usePreferences()
+  const [linkCopied, setLinkCopied] = useState(false)
   const currentRound = getCurrentRound(game)
   const summary = getChainSummary(game)
   const costs = getCostByRole(game)
   const roundStates = ROLES.map((role) => getCurrentRoleState(game, role)).filter(Boolean) as RoleRoundState[]
+  const sharedJoinUrl = buildSharedJoinUrl(game.code)
 
   function downloadCsv() {
     const blob = new Blob([exportGameCsv(game)], { type: 'text/csv;charset=utf-8' })
@@ -718,6 +873,12 @@ function AdminView({
     anchor.download = `${game.code}-beer-game-results.csv`
     anchor.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function copyJoinLink() {
+    await navigator.clipboard.writeText(sharedJoinUrl)
+    setLinkCopied(true)
+    window.setTimeout(() => setLinkCopied(false), 1800)
   }
 
   return (
@@ -732,6 +893,17 @@ function AdminView({
             <span>{t.adminPin}</span>
             <strong>{game.adminPin}</strong>
           </div>
+          <div className="share-link-row">
+            <label>
+              {t.playerJoinLink}
+              <input value={sharedJoinUrl} readOnly />
+            </label>
+            <button className="ghost-button" type="button" onClick={copyJoinLink}>
+              {linkCopied ? <Check size={16} /> : <Copy size={16} />}
+              {linkCopied ? t.copied : t.copyLink}
+            </button>
+          </div>
+          <p className="muted form-note">{t.playerJoinLinkHelp}</p>
         </div>
         <Timer game={game} now={now} />
       </section>
@@ -871,12 +1043,13 @@ function LobbyPanel({
           <article className="role-card" key={assignment.role}>
             <div>
               <h3>{localizedRoleLabels[language][assignment.role]}</h3>
-              <p>{assignment.joinedAt ? assignment.displayName || t.joined : t.waiting}</p>
+              <p>{assignment.joinedAt ? `${t.taken}: ${assignment.displayName || t.joined}` : `${t.available}: ${t.waiting}`}</p>
             </div>
             <div className="pin-box">
               <span>{t.pin}</span>
               <strong>{assignment.pin}</strong>
             </div>
+            <RoleInstructions role={assignment.role} compact />
             <button
               className="ghost-button"
               type="button"
@@ -895,18 +1068,57 @@ function LobbyPanel({
   )
 }
 
+function RoleInstructions({ role, compact = false }: { role: Role; compact?: boolean }) {
+  const { language, t } = usePreferences()
+  const instructions = roleInstructions[language][role]
+
+  return (
+    <div className={compact ? 'instruction-box compact' : 'instruction-box'}>
+      <div className="panel-title instruction-title">
+        <BookOpen size={18} />
+        <h2>{compact ? t.roleInstructions : `${t.howGameWorks}: ${localizedRoleLabels[language][role]}`}</h2>
+      </div>
+      <div className="instruction-grid">
+        <div>
+          <span>{t.yourSupplier}</span>
+          <p>{instructions.upstreamSupplier}</p>
+        </div>
+        <div>
+          <span>{t.yourCustomer}</span>
+          <p>{instructions.downstreamCustomer}</p>
+        </div>
+      </div>
+      {!compact ? (
+        <>
+          <p className="instruction-goal">
+            <strong>{t.yourGoal}:</strong> {instructions.goal}
+          </p>
+          <div>
+            <h3>{t.roundSteps}</h3>
+            <ol className="workflow-list">
+              {instructions.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </div>
+        </>
+      ) : (
+        <p className="instruction-goal">{instructions.goal}</p>
+      )}
+    </div>
+  )
+}
+
 function RoleView({
   game,
   role,
   now,
   onUpdate,
-  onSwitchSession,
 }: {
   game: Game
   role: Role
   now: number
   onUpdate: (game: Game) => void
-  onSwitchSession: (session: Session) => void
 }) {
   const { language, t } = usePreferences()
   const state = getCurrentRoleState(game, role)
@@ -917,6 +1129,7 @@ function RoleView({
       <section className="panel waiting-panel">
         <h2>{localizedRoleLabels[language][role]}</h2>
         <p>{t.waitingForStart}</p>
+        <RoleInstructions role={role} />
       </section>
     )
   }
@@ -940,10 +1153,6 @@ function RoleView({
         </div>
         <div className="hero-actions">
           <Timer game={game} now={now} />
-          <button className="ghost-button" type="button" onClick={() => onSwitchSession({ gameId: game.id, access: 'admin' })}>
-            <ShieldCheck size={16} />
-            {t.admin}
-          </button>
         </div>
       </section>
 
@@ -1021,6 +1230,10 @@ function RoleView({
       </section>
 
       <section className="panel">
+        <RoleInstructions role={role} />
+      </section>
+
+      <section className="panel">
         <div className="panel-title">
           <BarChart3 size={20} />
           <h2>{t.ownHistory}</h2>
@@ -1057,8 +1270,10 @@ function RoleSubmissionForm({
   state: RoleRoundState
   onUpdate: (game: Game) => void
 }) {
-  const { t } = usePreferences()
+  const { language, t } = usePreferences()
+  const recommendedDelivery = getRecommendedDelivery(state)
   const [incomingOrder, setIncomingOrder] = useState('')
+  const [deliveryQuantity, setDeliveryQuantity] = useState(String(recommendedDelivery))
   const [newOrder, setNewOrder] = useState(
     role === 'producer' ? '0' : String(state.recommendedOrderQuantity),
   )
@@ -1074,6 +1289,7 @@ function RoleSubmissionForm({
         role,
         submittedBy: compactRoleLabels[role],
         incomingOrder: role === 'retailer' ? Number(incomingOrder) : undefined,
+        shippedQuantity: role === 'retailer' ? undefined : Number(deliveryQuantity),
         newOrderToSupplier: role === 'producer' ? 0 : Number(newOrder),
       })
       onUpdate(updated)
@@ -1091,6 +1307,21 @@ function RoleSubmissionForm({
           onChange={setIncomingOrder}
           placeholder={t.enterPhysicalCard}
         />
+      ) : null}
+      {role !== 'retailer' ? (
+        <>
+          <div className="recommendation compact-recommendation">
+            <span>{t.recommendedDelivery}</span>
+            <strong>{formatNumber(recommendedDelivery, language)}</strong>
+            <p>{t.deliveryHelp}</p>
+          </div>
+          <NumberField
+            label={t.deliveryQuantity}
+            value={deliveryQuantity}
+            onChange={setDeliveryQuantity}
+            placeholder={String(recommendedDelivery)}
+          />
+        </>
       ) : null}
       {role === 'producer' ? (
         <div className="info-box">
@@ -1324,6 +1555,10 @@ function formatRecommendationReason(state: RoleRoundState, language: Language): 
   }
 
   return state.recommendationReason
+}
+
+function getRecommendedDelivery(state: RoleRoundState): number {
+  return Math.min(state.startingInventory, (state.incomingOrder ?? 0) + state.previousBackorder)
 }
 
 function formatTime(value: string, language: Language): string {

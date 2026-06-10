@@ -221,6 +221,7 @@ export interface SubmitRoundInput {
   role: Role
   submittedBy: string
   incomingOrder?: number
+  shippedQuantity?: number
   newOrderToSupplier?: number
   timedOut?: boolean
   autoAdvance?: boolean

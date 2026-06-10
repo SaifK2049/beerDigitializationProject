@@ -137,6 +137,11 @@ export function synchronizeSimulationRoundClock(game: Game): Game {
 }
 
 export function markRoleJoined(game: Game, role: Role, displayName: string): Game {
+  const existingAssignment = game.roleAssignments.find((assignment) => assignment.role === role)
+  if (existingAssignment?.joinedAt) {
+    throw new Error(`${compactRoleLabels[role]} is already taken.`)
+  }
+
   const now = new Date().toISOString()
   return {
     ...appendAudit(game, role, 'join_role', 'role_assignment', role, null, { displayName }),
@@ -248,15 +253,17 @@ export function submitRoleRound(input: SubmitRoundInput): Game {
       : requireValidOrder(input.newOrderToSupplier, getEffectiveOrderCap(game.config))
 
   const totalDemand = incomingOrder + state.previousBackorder
-  const shippedQuantity = Math.min(state.startingInventory, totalDemand)
+  const recommendedShipment = Math.min(state.startingInventory, totalDemand)
+  const shippedQuantity =
+    input.shippedQuantity === undefined
+      ? recommendedShipment
+      : requireValidShipment(input.shippedQuantity, state.startingInventory, totalDemand)
   const endingBackorder = totalDemand - shippedQuantity
   const endingInventory = state.startingInventory - shippedQuantity
   const inventoryCost = endingInventory * game.config.inventoryCostPerUnit
   const backorderCost = endingBackorder * game.config.backorderCostPerUnit
   const totalRoundCost = inventoryCost + backorderCost
   const submittedAt = new Date().toISOString()
-
-  assertNoInventoryBackorderOverlap(endingInventory, endingBackorder)
 
   const nextState: RoleRoundState = {
     ...state,
@@ -436,7 +443,7 @@ export function validateJoin(game: Game, role: Role | 'admin', pin: string): boo
   }
 
   return game.roleAssignments.some(
-    (assignment) => assignment.role === role && assignment.pin === pin.trim(),
+    (assignment) => assignment.role === role && !assignment.joinedAt && assignment.pin === pin.trim(),
   )
 }
 
@@ -632,18 +639,24 @@ function requireValidOrder(value: number | undefined, maxOrderQuantity: number):
   return quantity
 }
 
+function requireValidShipment(value: number, availableInventory: number, totalDemand: number): number {
+  const quantity = requireNonNegativeInteger(value, 'Delivery quantity must be a non-negative integer.')
+  if (quantity > availableInventory) {
+    throw new Error(`Delivery quantity must be ${availableInventory} or lower because that is the usable Lager.`)
+  }
+  if (quantity > totalDemand) {
+    throw new Error(`Delivery quantity must be ${totalDemand} or lower because that is the downstream order plus backorder.`)
+  }
+
+  return quantity
+}
+
 function requireNonNegativeInteger(value: number | undefined, message: string): number {
   if (value === undefined || !Number.isInteger(value) || value < 0) {
     throw new Error(message)
   }
 
   return value
-}
-
-function assertNoInventoryBackorderOverlap(endingInventory: number, endingBackorder: number): void {
-  if (endingInventory > 0 && endingBackorder > 0) {
-    throw new Error('Invalid round state: inventory and backorder cannot both be positive.')
-  }
 }
 
 function normalizeConfig(config: GameConfig): GameConfig {
