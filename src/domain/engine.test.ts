@@ -15,6 +15,25 @@ import { buildRecommendation, getEffectiveOrderCap } from './recommendation'
 import type { RoleRoundState } from './types'
 
 describe('Beer Game round engine', () => {
+  it('uses the 26-week customer-demand planning assumptions by default', () => {
+    expect(defaultGameConfig.maxRounds).toBe(26)
+    expect(defaultGameConfig.roundSeconds).toBe(60)
+    expect(defaultGameConfig.customerDemandMinimum).toBe(0)
+    expect(defaultGameConfig.customerDemandMaximum).toBe(16)
+    expect(defaultGameConfig.customerDemandStandardDeviation).toBe(2.59)
+  })
+
+  it('starts a default game in round 1 with a 60-second deadline', () => {
+    const game = startGame(createGame({ name: 'Start timing', config: defaultGameConfig }))
+    const round = game.rounds[0]
+    const durationSeconds =
+      (new Date(round.deadlineAt).getTime() - new Date(round.startsAt).getTime()) / 1000
+
+    expect(game.currentRound).toBe(1)
+    expect(game.status).toBe('active')
+    expect(durationSeconds).toBe(60)
+  })
+
   it('keeps customer demand physical until retailer submits it', () => {
     const game = startGame(createGame({ name: 'Test', config: defaultGameConfig }))
     const retailer = getCurrentRoleState(game, 'retailer')
@@ -341,7 +360,7 @@ describe('Beer Game round engine', () => {
 
     expect(submitted.currentRound).toBe(1)
     expect(submitted.roleRoundStates.filter((state) => state.roundNumber === 1).every((state) => state.submitted)).toBe(true)
-    expect(retailer?.incomingOrder).toBe(5)
+    expect(retailer?.incomingOrder).toBe(8)
     expect(retailer?.submittedBy).toBe('Bot Retailer')
   })
 
@@ -379,6 +398,7 @@ describe('Beer Game round engine', () => {
     expect(retailer?.recommendedOrderQuantity).toBeGreaterThan(0)
     expect(retailer?.recommendationInputs.inventoryPosition).toBeDefined()
     expect(retailer?.recommendationInputs.targetInventoryPosition).toBeDefined()
+    expect(retailer?.recommendationInputs.demandStandardDeviation).toBe(2.59)
   })
 
   it('caps JIT recommendations with automatic and explicit caps', () => {
@@ -565,7 +585,7 @@ describe('Beer Game round engine', () => {
 
     for (let round = 1; round <= 20 && game.status === 'active'; round += 1) {
       const demand = demands[demandIndex++] ?? 4
-      const randomForDemand = (demand - 2) / 7
+      const randomForDemand = (demand + 0.1) / 17
       game = submitSimulationRound(game, () => randomForDemand)
       const nonProducerStates = game.roleRoundStates.filter(
         (state) => state.roundNumber === round && state.role !== 'producer',
@@ -603,6 +623,7 @@ function submittedHistory(role: RoleRoundState['role'], incomingOrders: number[]
     recommendationReason: '',
     recommendationInputs: {
       forecastDemand: incomingOrder,
+      demandStandardDeviation: 2.59,
       previousBackorder: 0,
       targetSafetyStock: 0,
       currentInventory: 0,

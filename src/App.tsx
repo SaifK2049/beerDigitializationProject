@@ -189,6 +189,10 @@ const text = {
     dark: 'Dark',
     language: 'Language',
     leaveSession: 'Leave session',
+    overview: 'Overview',
+    backToDashboard: 'Back to dashboard',
+    currentAdminSession: 'Current admin session',
+    adminRolePreview: 'Admin role preview',
     localMode: 'Local demo mode',
     supabaseMode: 'Supabase configured',
     createGame: 'Create Game',
@@ -199,6 +203,9 @@ const text = {
     startingTransport: 'Starting Transport',
     startingWareneingang: 'Starting Wareneingang',
     initialRoleOrder: 'Initial role order',
+    customerDemandMin: 'Customer demand min',
+    customerDemandMax: 'Customer demand max',
+    demandStdDev: 'Demand std. dev.',
     orderCap: 'Order cap',
     inventoryCost: 'Inventory cost',
     backorderCost: 'Backorder cost',
@@ -332,6 +339,10 @@ const text = {
     dark: 'Dunkel',
     language: 'Sprache',
     leaveSession: 'Sitzung verlassen',
+    overview: 'Uebersicht',
+    backToDashboard: 'Zurueck zum Dashboard',
+    currentAdminSession: 'Aktuelle Admin-Sitzung',
+    adminRolePreview: 'Admin-Rollenvorschau',
     localMode: 'Lokaler Demo-Modus',
     supabaseMode: 'Supabase verbunden',
     createGame: 'Spiel erstellen',
@@ -342,6 +353,9 @@ const text = {
     startingTransport: 'Start Transport',
     startingWareneingang: 'Start Wareneingang',
     initialRoleOrder: 'Anfangsauftrag',
+    customerDemandMin: 'Kundennachfrage min.',
+    customerDemandMax: 'Kundennachfrage max.',
+    demandStdDev: 'Stdabw. Nachfrage',
     orderCap: 'Bestellgrenze',
     inventoryCost: 'Lagerkosten',
     backorderCost: 'Rueckstandskosten',
@@ -514,6 +528,8 @@ function App() {
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [language, setLanguageState] = useState<Language>(() => loadLanguage())
   const [theme, setThemeState] = useState<ThemeMode>(() => loadTheme())
+  const [showOverview, setShowOverview] = useState(false)
+  const [adminPreviewRole, setAdminPreviewRole] = useState<Role | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const sharedJoinCode = getSharedJoinCode()
   const currentGame = games.find((game) => game.id === session?.gameId) ?? null
@@ -586,6 +602,8 @@ function App() {
     const game = createGame({ name, config })
     upsertGame(game)
     setSession({ gameId: game.id, access: 'admin' })
+    setShowOverview(false)
+    setAdminPreviewRole(null)
   }
 
   function handleJoin(game: Game, role: Role, pin: string, displayName: string) {
@@ -597,9 +615,13 @@ function App() {
     const joinedGame = markRoleJoined(game, role, displayName)
     upsertGame(joinedGame)
     setSession({ gameId: game.id, access: 'role', role })
+    setShowOverview(false)
+    setAdminPreviewRole(null)
   }
 
   function handleLogout() {
+    setShowOverview(false)
+    setAdminPreviewRole(null)
     setSession(null)
   }
 
@@ -607,6 +629,8 @@ function App() {
     clearLocalData()
     setGames([])
     setSession(null)
+    setShowOverview(false)
+    setAdminPreviewRole(null)
   }
 
   return (
@@ -620,6 +644,19 @@ function App() {
           <div className="topbar-actions">
             <PreferenceControls />
             <StatusPill configured={isSupabaseConfigured} />
+            {session?.access === 'admin' && currentGame ? (
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => {
+                  setAdminPreviewRole(null)
+                  setShowOverview((value) => !value)
+                }}
+              >
+                <ClipboardList size={16} />
+                {showOverview ? text[language].backToDashboard as string : text[language].overview as string}
+              </button>
+            ) : null}
             {session ? (
               <button className="icon-button" type="button" onClick={handleLogout} title={text[language].leaveSession as string}>
                 <LogOut size={18} />
@@ -628,20 +665,34 @@ function App() {
           </div>
         </header>
 
-        {!currentGame || !session ? (
+        {!currentGame || !session || showOverview ? (
           <Home
             games={games}
             initialJoinCode={sharedJoinCode}
             onCreate={handleCreateGame}
             onJoin={handleJoin}
             onClearLocalData={handleClearLocalData}
+            adminSession={session?.access === 'admin' && currentGame ? currentGame : null}
+            onReturnToAdmin={() => {
+              setShowOverview(false)
+              setAdminPreviewRole(null)
+            }}
+          />
+        ) : session.access === 'admin' && adminPreviewRole ? (
+          <RoleView
+            game={currentGame}
+            role={adminPreviewRole}
+            now={now}
+            onUpdate={upsertGame}
+            adminPreview
+            onBackToAdmin={() => setAdminPreviewRole(null)}
           />
         ) : session.access === 'admin' ? (
           <AdminView
             game={currentGame}
             now={now}
             onUpdate={upsertGame}
-            onSwitchSession={setSession}
+            onOpenRole={setAdminPreviewRole}
           />
         ) : session.role ? (
           <RoleView
@@ -662,17 +713,39 @@ function Home({
   onCreate,
   onJoin,
   onClearLocalData,
+  adminSession,
+  onReturnToAdmin,
 }: {
   games: Game[]
   initialJoinCode: string
   onCreate: (name: string, config: GameConfig) => void
   onJoin: (game: Game, role: Role, pin: string, displayName: string) => void
   onClearLocalData: () => void
+  adminSession: Game | null
+  onReturnToAdmin: () => void
 }) {
   const { t } = usePreferences()
 
   return (
     <div className="home-grid">
+      {adminSession ? (
+        <section className="panel project-panel">
+          <div className="panel-title">
+            <ClipboardList size={20} />
+            <h2>{t.currentAdminSession}</h2>
+          </div>
+          <div className="code-strip">
+            <span>{t.gameCode}</span>
+            <strong>{adminSession.code}</strong>
+            <span>{t.active}</span>
+            <strong>{t.roundOf(adminSession.currentRound, adminSession.maxRounds)}</strong>
+          </div>
+          <button className="primary-button" type="button" onClick={onReturnToAdmin}>
+            <ClipboardList size={18} />
+            {t.backToDashboard}
+          </button>
+        </section>
+      ) : null}
       <CreateGamePanel onCreate={onCreate} />
       <JoinGamePanel games={games} initialCode={initialJoinCode} onJoin={onJoin} />
       <section className="panel project-panel">
@@ -737,6 +810,9 @@ function CreateGamePanel({ onCreate }: { onCreate: (name: string, config: GameCo
           <NumberField label={t.startingTransport} value={config.startingTransport} onChange={(value) => updateNumber('startingTransport', value)} />
           <NumberField label={t.startingWareneingang} value={config.startingWareneingang} onChange={(value) => updateNumber('startingWareneingang', value)} />
           <NumberField label={t.initialRoleOrder} value={config.initialIncomingOrder} onChange={(value) => updateNumber('initialIncomingOrder', value)} />
+          <NumberField label={t.customerDemandMin} value={config.customerDemandMinimum} onChange={(value) => updateNumber('customerDemandMinimum', value)} />
+          <NumberField label={t.customerDemandMax} value={config.customerDemandMaximum} onChange={(value) => updateNumber('customerDemandMaximum', value)} />
+          <NumberField label={t.demandStdDev} value={config.customerDemandStandardDeviation} onChange={(value) => updateNumber('customerDemandStandardDeviation', value)} step="0.01" />
           <NumberField label={t.orderCap} value={config.maxOrderQuantity ?? ''} onChange={(value) => updateNullableNumber('maxOrderQuantity', value)} />
           <NumberField label={t.inventoryCost} value={config.inventoryCostPerUnit} onChange={(value) => updateNumber('inventoryCostPerUnit', value)} step="0.5" />
           <NumberField label={t.backorderCost} value={config.backorderCostPerUnit} onChange={(value) => updateNumber('backorderCostPerUnit', value)} step="0.5" />
@@ -876,17 +952,19 @@ function AdminView({
   game,
   now,
   onUpdate,
-  onSwitchSession,
+  onOpenRole,
 }: {
   game: Game
   now: number
   onUpdate: (game: Game) => void
-  onSwitchSession: (session: Session) => void
+  onOpenRole: (role: Role) => void
 }) {
   const { language, t } = usePreferences()
   const [linkCopied, setLinkCopied] = useState(false)
   const [csvScope, setCsvScope] = useState<Role | 'all'>('all')
   const currentRound = getCurrentRound(game)
+  const roundAgeMs = currentRound ? now - new Date(currentRound.startsAt).getTime() : 0
+  const canManuallyAdvance = game.status === 'active' && roundAgeMs >= 1000
   const summary = getChainSummary(game)
   const costs = getCostByRole(game)
   const roundStates = ROLES.map((role) => getCurrentRoleState(game, role)).filter(Boolean) as RoleRoundState[]
@@ -936,7 +1014,7 @@ function AdminView({
       </section>
 
       {game.status === 'lobby' ? (
-        <LobbyPanel game={game} onStart={() => onUpdate(startGame(game))} onSwitchSession={onSwitchSession} />
+        <LobbyPanel game={game} onStart={() => onUpdate(startGame(game))} onOpenRole={onOpenRole} />
       ) : (
         <>
           <section className="toolbar panel">
@@ -959,7 +1037,16 @@ function AdminView({
                 </button>
               ) : null}
               {game.status === 'active' ? (
-                <button className="ghost-button" type="button" onClick={() => onUpdate(advanceRound(game, 'admin'))}>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  disabled={!canManuallyAdvance}
+                  onClick={() => {
+                    if (canManuallyAdvance) {
+                      onUpdate(advanceRound(game, 'admin'))
+                    }
+                  }}
+                >
                   <Clock3 size={16} />
                   {t.advance}
                 </button>
@@ -1020,7 +1107,7 @@ function AdminView({
                         <button
                           className="table-role-button"
                           type="button"
-                          onClick={() => onSwitchSession({ gameId: game.id, access: 'role', role: state.role })}
+                          onClick={() => onOpenRole(state.role)}
                         >
                           {localizedRoleLabels[language][state.role]}
                         </button>
@@ -1063,13 +1150,23 @@ function AdminView({
 function LobbyPanel({
   game,
   onStart,
-  onSwitchSession,
+  onOpenRole,
 }: {
   game: Game
   onStart: () => void
-  onSwitchSession: (session: Session) => void
+  onOpenRole: (role: Role) => void
 }) {
   const { language, t } = usePreferences()
+  const [isStarting, setIsStarting] = useState(false)
+
+  function handleStart() {
+    if (isStarting || game.status !== 'lobby') {
+      return
+    }
+
+    setIsStarting(true)
+    onStart()
+  }
 
   return (
     <section className="panel">
@@ -1092,14 +1189,14 @@ function LobbyPanel({
             <button
               className="ghost-button"
               type="button"
-              onClick={() => onSwitchSession({ gameId: game.id, access: 'role', role: assignment.role })}
+              onClick={() => onOpenRole(assignment.role)}
             >
               {t.openRole}
             </button>
           </article>
         ))}
       </div>
-      <button className="primary-button" type="button" onClick={onStart}>
+      <button className="primary-button" type="button" disabled={isStarting} onClick={handleStart}>
         {game.config.simulationMode ? <Shuffle size={18} /> : <Play size={18} />}
         {game.config.simulationMode ? t.startSimulation : t.startRoundOne}
       </button>
@@ -1211,11 +1308,15 @@ function RoleView({
   role,
   now,
   onUpdate,
+  adminPreview = false,
+  onBackToAdmin,
 }: {
   game: Game
   role: Role
   now: number
   onUpdate: (game: Game) => void
+  adminPreview?: boolean
+  onBackToAdmin?: () => void
 }) {
   const { language, t } = usePreferences()
   const state = getCurrentRoleState(game, role)
@@ -1244,11 +1345,17 @@ function RoleView({
     <div className="page-stack">
       <section className="panel role-hero">
         <div>
-          <p className="eyebrow">{t.roleDashboard}</p>
+          <p className="eyebrow">{adminPreview ? t.adminRolePreview : t.roleDashboard}</p>
           <h2>{localizedRoleLabels[language][role]}</h2>
           <p className="muted">{t.transparencyOnly}</p>
         </div>
         <div className="hero-actions">
+          {adminPreview && onBackToAdmin ? (
+            <button className="ghost-button" type="button" onClick={onBackToAdmin}>
+              <ClipboardList size={16} />
+              {t.backToDashboard}
+            </button>
+          ) : null}
           <Timer game={game} now={now} />
         </div>
       </section>
@@ -1304,6 +1411,7 @@ function RoleView({
           </div>
           <div className="formula-grid">
             <MiniMetric label={t.forecast} value={state.recommendationInputs.forecastDemand.toFixed(1)} />
+            <MiniMetric label={t.demandStdDev} value={(state.recommendationInputs.demandStandardDeviation ?? game.config.customerDemandStandardDeviation ?? 0).toFixed(2)} />
             <MiniMetric label={t.backorder} value={state.recommendationInputs.previousBackorder} />
             <MiniMetric label={t.inventoryPosition} value={(state.recommendationInputs.inventoryPosition ?? 0).toFixed(1)} />
             <MiniMetric label={t.targetPosition} value={(state.recommendationInputs.targetInventoryPosition ?? 0).toFixed(1)} />

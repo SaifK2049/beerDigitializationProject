@@ -47,6 +47,9 @@ export interface GameConfig {
   maxRounds: number
   roundSeconds: number
   initialIncomingOrder: number
+  customerDemandMinimum: number
+  customerDemandMaximum: number
+  customerDemandStandardDeviation: number
   timeoutFallback: 'previous_order_or_zero'
   demoMode: boolean
   demoCustomerDemand: number[]
@@ -104,6 +107,7 @@ export interface RoleRoundState {
 
 export interface RecommendationInputs {
   forecastDemand: number
+  demandStandardDeviation: number
   previousBackorder: number
   targetSafetyStock: number
   currentInventory: number

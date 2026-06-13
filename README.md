@@ -6,7 +6,7 @@ Web-based Beer Game / Supply Chain classroom tool for a university digitalizatio
 
 - React + TypeScript + Vite app with mobile-friendly role and admin dashboards.
 - Local demo persistence through `localStorage`, so the app works immediately without backend credentials.
-- Supabase-ready client wrapper and PostgreSQL migration in `supabase/migrations/0001_beer_game_schema.sql`.
+- Supabase-ready client wrapper and PostgreSQL migrations in `supabase/migrations/`.
 - Four role flow: Retailer, Wholesaler, Distributor, Producer.
 - Admin/Evaluator flow with lobby, role PINs, start/pause/resume/reset, manual advance, statistics, and CSV export.
 - Option B engine:
@@ -18,6 +18,7 @@ Web-based Beer Game / Supply Chain classroom tool for a university digitalizatio
   - Producer uses unlimited upstream stock in v1.
 - Explainable recommender and warning indicators.
 - Unit tests for core Beer Game rules.
+- Default 26-week test phase assumptions as at 18 June 2026: customer demand minimum `0`, maximum `16`, and standard deviation `2.59` crates.
 
 ## Scripts
 
@@ -48,9 +49,10 @@ The current implementation stores games in the browser for immediate testing. Fo
 ## Supabase Deployment Path
 
 1. Create a Supabase project.
-2. Apply both SQL files in order:
+2. Apply the SQL migration files in order:
    - `supabase/migrations/0001_beer_game_schema.sql`
    - `supabase/migrations/0002_shared_game_documents.sql`
+   - `supabase/migrations/0003_customer_demand_assumptions.sql`
 3. Copy `.env.example` to `.env.local`.
 4. Set:
 

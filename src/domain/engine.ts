@@ -25,9 +25,12 @@ export const defaultGameConfig: GameConfig = {
   targetSafetyStock: 4,
   movingAverageWindow: 3,
   maxOrderQuantity: null,
-  maxRounds: 20,
+  maxRounds: 26,
   roundSeconds: 60,
   initialIncomingOrder: 4,
+  customerDemandMinimum: 0,
+  customerDemandMaximum: 16,
+  customerDemandStandardDeviation: 2.59,
   timeoutFallback: 'previous_order_or_zero',
   demoMode: false,
   demoCustomerDemand: [4, 4, 4, 4, 8, 8, 8, 8, 4, 4, 4, 4],
@@ -35,8 +38,8 @@ export const defaultGameConfig: GameConfig = {
 }
 
 export const simulationCustomerDemandRange = {
-  min: 2,
-  max: 8,
+  min: defaultGameConfig.customerDemandMinimum,
+  max: defaultGameConfig.customerDemandMaximum,
 }
 
 export const simulationRoundSeconds = 5
@@ -79,11 +82,8 @@ export function submitSimulationRound(game: Game, random = Math.random): Game {
     return game
   }
 
-  const customerDemand = randomInteger(
-    simulationCustomerDemandRange.min,
-    simulationCustomerDemandRange.max,
-    random,
-  )
+  const demandRange = getCustomerDemandRange(game.config)
+  const customerDemand = randomInteger(demandRange.min, demandRange.max, random)
   let nextGame = game
 
   for (const role of ROLES) {
@@ -661,6 +661,14 @@ function requireNonNegativeInteger(value: number | undefined, message: string): 
 
 function normalizeConfig(config: GameConfig): GameConfig {
   const simulationMode = Boolean(config.simulationMode)
+  const demandMinimum = Math.max(
+    0,
+    Math.round(config.customerDemandMinimum ?? defaultGameConfig.customerDemandMinimum),
+  )
+  const demandMaximum = Math.max(
+    demandMinimum,
+    Math.round(config.customerDemandMaximum ?? defaultGameConfig.customerDemandMaximum),
+  )
 
   return {
     ...config,
@@ -674,6 +682,12 @@ function normalizeConfig(config: GameConfig): GameConfig {
     maxRounds: Math.max(1, Math.round(config.maxRounds)),
     roundSeconds: simulationMode ? simulationRoundSeconds : Math.max(10, Math.round(config.roundSeconds)),
     initialIncomingOrder: Math.max(0, Math.round(config.initialIncomingOrder)),
+    customerDemandMinimum: demandMinimum,
+    customerDemandMaximum: demandMaximum,
+    customerDemandStandardDeviation: Math.max(
+      0,
+      roundTwo(config.customerDemandStandardDeviation ?? defaultGameConfig.customerDemandStandardDeviation),
+    ),
     maxOrderQuantity:
       config.maxOrderQuantity === null ? null : Math.max(0, Math.round(config.maxOrderQuantity)),
     demoMode: simulationMode ? false : Boolean(config.demoMode),
@@ -686,8 +700,18 @@ function getRoundSeconds(config: GameConfig): number {
   return config.simulationMode ? simulationRoundSeconds : config.roundSeconds
 }
 
+function getCustomerDemandRange(config: GameConfig): { min: number; max: number } {
+  const min = Math.max(0, Math.round(config.customerDemandMinimum ?? simulationCustomerDemandRange.min))
+  const max = Math.max(min, Math.round(config.customerDemandMaximum ?? simulationCustomerDemandRange.max))
+  return { min, max }
+}
+
 function randomInteger(min: number, max: number, random: () => number): number {
   return Math.floor(random() * (max - min + 1)) + min
+}
+
+function roundTwo(value: number): number {
+  return Math.round(value * 100) / 100
 }
 
 function appendAudit(

@@ -23,6 +23,7 @@ describe('localStore', () => {
   })
 
   it('does not throw when localStorage quota is exceeded', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const setItem = vi.fn(() => {
       throw new DOMException('Quota exceeded', 'QuotaExceededError')
     })
@@ -36,6 +37,10 @@ describe('localStore', () => {
     expect(() => saveGames([createGame({ name: 'Quota', config: defaultGameConfig })])).not.toThrow()
     expect(setItem).toHaveBeenCalled()
     expect(removeItem).toHaveBeenCalledWith('beer-game.games')
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Local game cache save failed; continuing without full local cache.',
+      expect.any(DOMException),
+    )
   })
 
   it('clears stale game and session data when the storage version changes', () => {

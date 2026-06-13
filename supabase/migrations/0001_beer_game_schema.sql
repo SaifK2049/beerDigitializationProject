@@ -16,7 +16,7 @@ create table if not exists public.games (
   name text not null default 'Beer Game',
   status game_status not null default 'lobby',
   current_round integer not null default 0,
-  max_rounds integer not null default 20,
+  max_rounds integer not null default 26,
   admin_pin_hash text not null,
   transparency_level text not null default 'local_structured',
   created_by uuid references auth.users(id),
@@ -37,6 +37,9 @@ create table if not exists public.game_configs (
   max_order_quantity integer,
   round_seconds integer not null default 60,
   initial_incoming_order integer not null default 4,
+  customer_demand_minimum integer not null default 0,
+  customer_demand_maximum integer not null default 16,
+  customer_demand_standard_deviation numeric(10,2) not null default 2.59,
   timeout_fallback text not null default 'previous_order_or_zero',
   demo_mode boolean not null default false,
   demo_customer_demand integer[] not null default '{4,4,4,4,8,8,8,8,4,4,4,4}'

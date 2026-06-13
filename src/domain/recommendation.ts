@@ -56,6 +56,7 @@ export function buildRecommendation(
   const capApplied = quantity < uncappedQuantity
   const inputs: RecommendationInputs = {
     forecastDemand,
+    demandStandardDeviation: config.customerDemandStandardDeviation ?? 0,
     previousBackorder: currentState.previousBackorder,
     targetSafetyStock: config.targetSafetyStock,
     currentInventory: currentState.startingInventory,
