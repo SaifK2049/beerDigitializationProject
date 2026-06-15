@@ -53,12 +53,14 @@ import {
   validateJoin,
 } from './domain/engine'
 import { getChainSummary, getCostByRole, getRoleHistory, exportGameCsv } from './domain/statistics'
+import { buildLiveRecommendation } from './domain/recommendation'
 import {
   ROLES,
   compactRoleLabels,
   roleLabels,
   type Game,
   type GameConfig,
+  type RecommendationInputs,
   type Role,
   type RoleRoundState,
   type Session,
@@ -207,6 +209,7 @@ const text = {
     customerDemandMax: 'Customer demand max',
     demandStdDev: 'Demand std. dev.',
     orderCap: 'Order cap',
+    upstreamLager: 'Upstream Lager',
     inventoryCost: 'Inventory cost',
     backorderCost: 'Backorder cost',
     safetyStock: 'Safety stock',
@@ -306,6 +309,7 @@ const text = {
     enterPhysicalCard: 'Enter the physical customer card.',
     decisionSupport: 'Decision Support',
     suggestedOrder: 'Suggested order',
+    liveRecommendation: 'Live recommendation',
     forecast: 'Forecast',
     inventoryPosition: 'Inventory position',
     targetPosition: 'Target position',
@@ -357,6 +361,7 @@ const text = {
     customerDemandMax: 'Kundennachfrage max.',
     demandStdDev: 'Stdabw. Nachfrage',
     orderCap: 'Bestellgrenze',
+    upstreamLager: 'Vorgelagertes Lager',
     inventoryCost: 'Lagerkosten',
     backorderCost: 'Rueckstandskosten',
     safetyStock: 'Sicherheitsbestand',
@@ -456,6 +461,7 @@ const text = {
     enterPhysicalCard: 'Physische Kundenkarte eingeben.',
     decisionSupport: 'Entscheidungsunterstuetzung',
     suggestedOrder: 'Bestellvorschlag',
+    liveRecommendation: 'Live-Vorschlag',
     forecast: 'Prognose',
     inventoryPosition: 'Bestandsposition',
     targetPosition: 'Zielposition',
@@ -1416,6 +1422,9 @@ function RoleView({
             <MiniMetric label={t.inventoryPosition} value={(state.recommendationInputs.inventoryPosition ?? 0).toFixed(1)} />
             <MiniMetric label={t.targetPosition} value={(state.recommendationInputs.targetInventoryPosition ?? 0).toFixed(1)} />
             <MiniMetric label={t.pipeline} value={state.recommendationInputs.pipelineInventory} />
+            {state.recommendationInputs.upstreamInventoryCap != null ? (
+              <MiniMetric label={t.upstreamLager} value={state.recommendationInputs.upstreamInventoryCap} />
+            ) : null}
             <MiniMetric label={t.orderCap} value={state.recommendationInputs.orderCap ?? game.config.maxOrderQuantity ?? 'Auto'} />
           </div>
           {state.warnings.length > 0 ? (
@@ -1484,7 +1493,32 @@ function RoleSubmissionForm({
   const [newOrder, setNewOrder] = useState(
     role === 'producer' ? '0' : String(state.recommendedOrderQuantity),
   )
+  const [orderTouched, setOrderTouched] = useState(false)
   const [error, setError] = useState('')
+  const incomingOrderValue = incomingOrder.trim() === '' ? null : Number(incomingOrder)
+  const liveRecommendation =
+    role === 'retailer' && incomingOrderValue !== null && Number.isInteger(incomingOrderValue) && incomingOrderValue >= 0
+      ? buildLiveRecommendation(
+          role,
+          game.config,
+          state,
+          incomingOrderValue,
+          state.recommendationInputs.upstreamInventoryCap,
+        )
+      : null
+
+  useEffect(() => {
+    if (!liveRecommendation || orderTouched) {
+      return
+    }
+
+    setNewOrder(String(liveRecommendation.quantity))
+  }, [liveRecommendation?.quantity, orderTouched])
+
+  function handleNewOrderChange(value: string) {
+    setOrderTouched(true)
+    setNewOrder(value)
+  }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -1508,12 +1542,21 @@ function RoleSubmissionForm({
   return (
     <form className="form-grid" onSubmit={handleSubmit}>
       {role === 'retailer' ? (
-        <NumberField
-          label={t.physicalCustomerOrder}
-          value={incomingOrder}
-          onChange={setIncomingOrder}
-          placeholder={t.enterPhysicalCard}
-        />
+        <>
+          <NumberField
+            label={t.physicalCustomerOrder}
+            value={incomingOrder}
+            onChange={setIncomingOrder}
+            placeholder={t.enterPhysicalCard}
+          />
+          {liveRecommendation ? (
+            <div className="recommendation compact-recommendation">
+              <span>{t.liveRecommendation}</span>
+              <strong>{formatNumber(liveRecommendation.quantity, language)}</strong>
+              <p>{formatRecommendationText(role, liveRecommendation.quantity, liveRecommendation.reason, liveRecommendation.inputs, language)}</p>
+            </div>
+          ) : null}
+        </>
       ) : null}
       {role !== 'retailer' ? (
         <>
@@ -1538,7 +1581,7 @@ function RoleSubmissionForm({
         <NumberField
           label={t.newOrderToSupplier}
           value={newOrder}
-          onChange={setNewOrder}
+          onChange={handleNewOrderChange}
           placeholder="0"
         />
       )}
@@ -1748,8 +1791,23 @@ function formatChartValue(value: number, name: string, language: Language): [str
 }
 
 function formatRecommendationReason(state: RoleRoundState, language: Language): string {
-  const inputs = state.recommendationInputs
-  if (state.role === 'producer') {
+  return formatRecommendationText(
+    state.role,
+    state.recommendedOrderQuantity,
+    state.recommendationReason,
+    state.recommendationInputs,
+    language,
+  )
+}
+
+function formatRecommendationText(
+  role: Role,
+  quantity: number,
+  englishReason: string,
+  inputs: RecommendationInputs,
+  language: Language,
+): string {
+  if (role === 'producer') {
     return language === 'de'
       ? 'Produktion hat keine vorgelagerte Rolle; ungenutzter Produktionsbestand verursacht Lagerkosten.'
       : 'Producer has no upstream supplier; unsold production stock still creates inventory cost.'
@@ -1758,10 +1816,15 @@ function formatRecommendationReason(state: RoleRoundState, language: Language): 
   if (language === 'de') {
     const targetPosition = inputs.targetInventoryPosition ?? 0
     const inventoryPosition = inputs.inventoryPosition ?? 0
-    return `Vorschlag ${state.recommendedOrderQuantity}: Prognose ${formatNumber(inputs.forecastDemand, language)} plus schrittweise JIT-Korrektur zur Zielposition ${formatNumber(targetPosition, language)} von aktueller Position ${formatNumber(inventoryPosition, language)}.${inputs.capApplied ? ` Von ${inputs.uncappedOrder} auf Grenze ${inputs.orderCap} begrenzt.` : ''}`
+    const capReason = inputs.upstreamCapApplied
+      ? ` Von ${inputs.uncappedOrder} durch vorgelagertes Start-Lager (${inputs.upstreamInventoryCap}) begrenzt.`
+      : inputs.capApplied
+        ? ` Von ${inputs.uncappedOrder} auf Bestellgrenze ${inputs.effectiveOrderCap ?? inputs.orderCap} begrenzt.`
+        : ''
+    return `Vorschlag ${quantity}: Prognose ${formatNumber(inputs.forecastDemand, language)} plus schrittweise JIT-Korrektur zur Zielposition ${formatNumber(targetPosition, language)} von aktueller Position ${formatNumber(inventoryPosition, language)}.${capReason}`
   }
 
-  return state.recommendationReason
+  return englishReason
 }
 
 function getRecommendedDelivery(state: RoleRoundState): number {

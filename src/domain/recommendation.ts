@@ -25,16 +25,21 @@ export function buildRecommendation(
     | 'roundNumber'
   >,
   history: RoleRoundState[],
+  upstreamStartingInventory: number | null = null,
+  currentIncomingOrderOverride?: number,
 ): {
   quantity: number
   reason: string
   inputs: RecommendationInputs
   warnings: DecisionWarning[]
 } {
-  const recentIncomingOrders = history
-    .filter((state) => state.role === role && state.submitted && state.incomingOrder !== null)
-    .slice(-config.movingAverageWindow)
-    .map((state) => state.incomingOrder ?? 0)
+  const recentIncomingOrders =
+    currentIncomingOrderOverride === undefined
+      ? history
+          .filter((state) => state.role === role && state.submitted && state.incomingOrder !== null)
+          .slice(-config.movingAverageWindow)
+          .map((state) => state.incomingOrder ?? 0)
+      : [currentIncomingOrderOverride]
 
   const forecastDemand = forecastRecentDemand(recentIncomingOrders, config.initialIncomingOrder)
   const pipelineInventory = currentState.materialMovedToWareneingang
@@ -52,8 +57,14 @@ export function buildRecommendation(
   const uncappedQuantity =
     role === 'producer' ? 0 : Math.max(0, Math.round(forecastDemand + correction))
   const orderCap = getEffectiveOrderCap(config)
-  const quantity = Math.min(uncappedQuantity, orderCap)
+  const effectiveOrderCap =
+    role === 'producer' || upstreamStartingInventory === null
+      ? orderCap
+      : Math.min(orderCap, upstreamStartingInventory)
+  const quantity = Math.min(uncappedQuantity, effectiveOrderCap)
   const capApplied = quantity < uncappedQuantity
+  const upstreamCapApplied =
+    upstreamStartingInventory !== null && upstreamStartingInventory <= orderCap && upstreamStartingInventory < uncappedQuantity
   const inputs: RecommendationInputs = {
     forecastDemand,
     demandStandardDeviation: config.customerDemandStandardDeviation ?? 0,
@@ -66,6 +77,9 @@ export function buildRecommendation(
     targetInventoryPosition,
     uncappedOrder: uncappedQuantity,
     orderCap,
+    upstreamInventoryCap: upstreamStartingInventory,
+    effectiveOrderCap,
+    upstreamCapApplied,
     capApplied,
   }
 
@@ -73,13 +87,57 @@ export function buildRecommendation(
     quantity,
     inputs,
     warnings: buildWarnings(role, quantity, inputs, history),
-    reason:
-      role === 'producer'
-        ? `Recommended 0: producer has no upstream supplier; inventory cost is based on unsold production stock.`
-        : `Recommended ${quantity}: forecast ${roundOne(inputs.forecastDemand)} plus JIT correction ` +
-      `toward target position ${roundOne(inputs.targetInventoryPosition)} from current position ` +
-      `${roundOne(inputs.inventoryPosition)}.${capApplied ? ` Capped from ${uncappedQuantity} at ${orderCap}.` : ''}`,
+    reason: buildReason(role, quantity, uncappedQuantity, inputs),
   }
+}
+
+export function buildLiveRecommendation(
+  role: Role,
+  config: GameConfig,
+  currentState: Pick<
+    RoleRoundState,
+    | 'startingInventory'
+    | 'materialMovedToWareneingang'
+    | 'previousBackorder'
+    | 'roundNumber'
+  >,
+  currentIncomingOrder: number,
+  upstreamStartingInventory: number | null = null,
+): {
+  quantity: number
+  reason: string
+  inputs: RecommendationInputs
+  warnings: DecisionWarning[]
+} {
+  return buildRecommendation(
+    role,
+    config,
+    currentState,
+    [],
+    upstreamStartingInventory,
+    currentIncomingOrder,
+  )
+}
+
+function buildReason(
+  role: Role,
+  quantity: number,
+  uncappedQuantity: number,
+  inputs: RecommendationInputs,
+): string {
+  if (role === 'producer') {
+    return 'Recommended 0: producer has no upstream supplier; inventory cost is based on unsold production stock.'
+  }
+
+  const capReason = inputs.upstreamCapApplied
+    ? ` Capped from ${uncappedQuantity} by upstream round-start Lager (${inputs.upstreamInventoryCap}).`
+    : inputs.capApplied
+      ? ` Capped from ${uncappedQuantity} at order cap ${inputs.effectiveOrderCap}.`
+      : ''
+
+  return `Recommended ${quantity}: forecast ${roundOne(inputs.forecastDemand)} plus JIT correction ` +
+    `toward target position ${roundOne(inputs.targetInventoryPosition)} from current position ` +
+    `${roundOne(inputs.inventoryPosition)}.${capReason}`
 }
 
 function buildWarnings(
@@ -103,11 +161,14 @@ function buildWarnings(
   }
 
   if (inputs.capApplied) {
+    const capDetail = inputs.upstreamCapApplied
+      ? `the upstream supplier's round-start Lager (${inputs.upstreamInventoryCap})`
+      : `the order cap (${inputs.orderCap})`
     warnings.push({
       code: 'order_cap_applied',
       label: 'Order cap applied',
       severity: 'info',
-      detail: `The raw JIT order was ${inputs.uncappedOrder}, capped at ${inputs.orderCap} to limit bullwhip risk.`,
+      detail: `The raw JIT order was ${inputs.uncappedOrder}, capped by ${capDetail}.`,
     })
   }
 

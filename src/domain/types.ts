@@ -117,6 +117,9 @@ export interface RecommendationInputs {
   targetInventoryPosition: number
   uncappedOrder: number
   orderCap: number
+  upstreamInventoryCap: number | null
+  effectiveOrderCap: number
+  upstreamCapApplied: boolean
   capApplied: boolean
 }
 

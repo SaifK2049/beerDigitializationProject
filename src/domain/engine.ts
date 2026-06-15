@@ -9,6 +9,7 @@ import {
   type DecisionRecommendation,
   type Game,
   type GameConfig,
+  type RecommendationInputs,
   type Role,
   type RoleAssignment,
   type RoleRoundState,
@@ -164,7 +165,7 @@ export function startGame(game: Game): Game {
 
   const now = new Date()
   const firstRound = createRound(game.id, 1, now, getRoundSeconds(game.config))
-  const states = ROLES.map((role) => createRoleRoundState(game, role, 1))
+  const states = createRoleRoundStates(game, 1)
 
   return appendAudit(
     {
@@ -342,9 +343,7 @@ export function submitRoleRound(input: SubmitRoundInput): Game {
     nextState,
   )
 
-  return input.autoAdvance !== false && shouldAutoAdvance(nextGame)
-    ? advanceRound(nextGame, 'auto')
-    : nextGame
+  return nextGame
 }
 
 export function advanceRound(game: Game, advancedBy: string): Game {
@@ -396,7 +395,7 @@ export function advanceRound(game: Game, advancedBy: string): Game {
 
   const nextRoundNumber = nextGame.currentRound + 1
   const nextRound = createRound(nextGame.id, nextRoundNumber, new Date(), getRoundSeconds(nextGame.config))
-  const nextStates = ROLES.map((role) => createRoleRoundState({ ...nextGame, rounds }, role, nextRoundNumber))
+  const nextStates = createRoleRoundStates({ ...nextGame, rounds }, nextRoundNumber)
 
   return appendAudit(
     {
@@ -447,7 +446,33 @@ export function validateJoin(game: Game, role: Role | 'admin', pin: string): boo
   )
 }
 
-function createRoleRoundState(game: Game, role: Role, roundNumber: number): RoleRoundState {
+function createRoleRoundStates(game: Game, roundNumber: number): RoleRoundState[] {
+  const baseStates = ROLES.map((role) => createBaseRoleRoundState(game, role, roundNumber))
+
+  return baseStates.map((state) => {
+    const upstream = upstreamRole[state.role]
+    const upstreamState = upstream
+      ? baseStates.find((candidate) => candidate.role === upstream)
+      : undefined
+    const recommendation = buildRecommendation(
+      state.role,
+      game.config,
+      state,
+      game.roleRoundStates,
+      upstreamState?.startingInventory ?? null,
+    )
+
+    return {
+      ...state,
+      recommendedOrderQuantity: recommendation.quantity,
+      recommendationReason: recommendation.reason,
+      recommendationInputs: recommendation.inputs,
+      warnings: recommendation.warnings,
+    }
+  })
+}
+
+function createBaseRoleRoundState(game: Game, role: Role, roundNumber: number): RoleRoundState {
   const previous = game.roleRoundStates.find(
     (state) => state.role === role && state.roundNumber === roundNumber - 1,
   )
@@ -471,18 +496,6 @@ function createRoleRoundState(game: Game, role: Role, roundNumber: number): Role
       ? getProducerPlannedOutput(game, availableBeforePlannedOutput, incomingOrder ?? 0, previousBackorder)
       : 0
   const startingInventory = availableBeforePlannedOutput + producerPlannedOutput
-  const recommendation = buildRecommendation(
-    role,
-    game.config,
-    {
-      startingInventory,
-      materialMovedToWareneingang,
-      previousBackorder,
-      roundNumber,
-    },
-    game.roleRoundStates,
-  )
-
   return {
     id: createId('state'),
     gameId: game.id,
@@ -501,10 +514,10 @@ function createRoleRoundState(game: Game, role: Role, roundNumber: number): Role
     endingInventory: null,
     endingBackorder: null,
     newOrderToSupplier: role === 'producer' ? 0 : null,
-    recommendedOrderQuantity: recommendation.quantity,
-    recommendationReason: recommendation.reason,
-    recommendationInputs: recommendation.inputs,
-    warnings: recommendation.warnings,
+    recommendedOrderQuantity: 0,
+    recommendationReason: '',
+    recommendationInputs: createEmptyRecommendationInputs(game.config),
+    warnings: [],
     inventoryCost: null,
     backorderCost: null,
     totalRoundCost: null,
@@ -512,6 +525,27 @@ function createRoleRoundState(game: Game, role: Role, roundNumber: number): Role
     submittedAt: null,
     submitted: false,
     timedOut: false,
+  }
+}
+
+function createEmptyRecommendationInputs(config: GameConfig): RecommendationInputs {
+  const orderCap = getEffectiveOrderCap(config)
+  return {
+    forecastDemand: 0,
+    demandStandardDeviation: config.customerDemandStandardDeviation ?? 0,
+    previousBackorder: 0,
+    targetSafetyStock: config.targetSafetyStock,
+    currentInventory: 0,
+    pipelineInventory: 0,
+    movingAverageWindow: config.movingAverageWindow,
+    inventoryPosition: 0,
+    targetInventoryPosition: 0,
+    uncappedOrder: 0,
+    orderCap,
+    upstreamInventoryCap: null,
+    effectiveOrderCap: orderCap,
+    upstreamCapApplied: false,
+    capApplied: false,
   }
 }
 
@@ -624,10 +658,6 @@ function getPreviousOutgoingOrder(game: Game, role: Role): number {
 
 function getCappedPreviousOutgoingOrder(game: Game, role: Role): number {
   return Math.min(getPreviousOutgoingOrder(game, role), getEffectiveOrderCap(game.config))
-}
-
-function shouldAutoAdvance(game: Game): boolean {
-  return ROLES.every((role) => getCurrentRoleState(game, role)?.submitted)
 }
 
 function requireValidOrder(value: number | undefined, maxOrderQuantity: number): number {

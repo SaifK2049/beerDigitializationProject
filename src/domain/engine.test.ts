@@ -11,7 +11,7 @@ import {
   synchronizeSimulationRoundClock,
   validateJoin,
 } from './engine'
-import { buildRecommendation, getEffectiveOrderCap } from './recommendation'
+import { buildLiveRecommendation, buildRecommendation, getEffectiveOrderCap } from './recommendation'
 import type { RoleRoundState } from './types'
 
 describe('Beer Game round engine', () => {
@@ -32,6 +32,25 @@ describe('Beer Game round engine', () => {
     expect(game.currentRound).toBe(1)
     expect(game.status).toBe('active')
     expect(durationSeconds).toBe(60)
+  })
+
+  it('does not advance automatically after every role submits the current round', () => {
+    let game = startGame(createGame({ name: 'Manual round advance', config: defaultGameConfig }))
+
+    for (const role of ['producer', 'distributor', 'wholesaler', 'retailer'] as const) {
+      game = submitRoleRound({
+        game,
+        role,
+        submittedBy: 'test',
+        incomingOrder: role === 'retailer' ? 4 : undefined,
+        newOrderToSupplier: role === 'producer' ? 0 : 4,
+      })
+    }
+
+    expect(game.currentRound).toBe(1)
+    expect(game.status).toBe('active')
+    expect(game.rounds).toHaveLength(1)
+    expect(game.roleRoundStates.filter((state) => state.roundNumber === 1).every((state) => state.submitted)).toBe(true)
   })
 
   it('keeps customer demand physical until retailer submits it', () => {
@@ -401,6 +420,78 @@ describe('Beer Game round engine', () => {
     expect(retailer?.recommendationInputs.demandStandardDeviation).toBe(2.59)
   })
 
+  it('caps recommendations by the immediate upstream round-start Lager', () => {
+    const game = startGame(
+      createGame({
+        name: 'Upstream cap',
+        config: {
+          ...defaultGameConfig,
+          startingInventory: 2,
+          startingTransport: 0,
+          startingWareneingang: 0,
+          initialIncomingOrder: 4,
+          maxOrderQuantity: 16,
+        },
+      }),
+    )
+    const retailer = getCurrentRoleState(game, 'retailer')
+
+    expect(retailer?.recommendationInputs.uncappedOrder).toBe(4)
+    expect(retailer?.recommendationInputs.upstreamInventoryCap).toBe(2)
+    expect(retailer?.recommendationInputs.upstreamCapApplied).toBe(true)
+    expect(retailer?.recommendedOrderQuantity).toBe(2)
+  })
+
+  it('keeps the configured order cap when it is stricter than upstream Lager', () => {
+    const game = startGame(
+      createGame({
+        name: 'Order cap',
+        config: {
+          ...defaultGameConfig,
+          startingInventory: 20,
+          startingTransport: 0,
+          startingWareneingang: 0,
+          initialIncomingOrder: 8,
+          maxOrderQuantity: 3,
+        },
+      }),
+    )
+    const retailer = getCurrentRoleState(game, 'retailer')
+
+    expect(retailer?.recommendationInputs.uncappedOrder).toBe(8)
+    expect(retailer?.recommendationInputs.upstreamInventoryCap).toBe(20)
+    expect(retailer?.recommendationInputs.upstreamCapApplied).toBe(false)
+    expect(retailer?.recommendedOrderQuantity).toBe(3)
+  })
+
+  it('keeps producer recommendations at zero', () => {
+    const game = startGame(createGame({ name: 'Producer recommendation', config: defaultGameConfig }))
+    const producer = getCurrentRoleState(game, 'producer')
+
+    expect(producer?.recommendedOrderQuantity).toBe(0)
+    expect(producer?.recommendationInputs.upstreamInventoryCap).toBeNull()
+  })
+
+  it('builds live recommendations from the entered current customer order', () => {
+    const recommendation = buildLiveRecommendation(
+      'retailer',
+      { ...defaultGameConfig, maxOrderQuantity: 16 },
+      {
+        startingInventory: 4,
+        materialMovedToWareneingang: 0,
+        previousBackorder: 0,
+        roundNumber: 1,
+      },
+      12,
+      6,
+    )
+
+    expect(recommendation.inputs.forecastDemand).toBe(12)
+    expect(recommendation.inputs.upstreamInventoryCap).toBe(6)
+    expect(recommendation.inputs.upstreamCapApplied).toBe(true)
+    expect(recommendation.quantity).toBe(6)
+  })
+
   it('caps JIT recommendations with automatic and explicit caps', () => {
     const uncappedRecommendation = buildRecommendation(
       'wholesaler',
@@ -633,6 +724,9 @@ function submittedHistory(role: RoleRoundState['role'], incomingOrders: number[]
       targetInventoryPosition: 0,
       uncappedOrder: incomingOrder,
       orderCap: 16,
+      upstreamInventoryCap: null,
+      effectiveOrderCap: 16,
+      upstreamCapApplied: false,
       capApplied: false,
     },
     warnings: [],
