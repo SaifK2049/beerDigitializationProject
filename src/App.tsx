@@ -325,10 +325,14 @@ const text = {
     timeout: 'Timeout',
     physicalCustomerOrder: 'Physical customer order',
     newOrderToSupplier: 'New order to upstream supplier',
+    newOrderVisibilityHelp: 'This order becomes the upstream role incoming order in the next round after the admin advances.',
     deliveryQuantity: 'Delivery to downstream customer',
     recommendedDelivery: 'Recommended delivery',
     deliveryHelp: 'Recommended delivery equals the most you can sensibly ship now: incoming downstream order plus backorder, capped by usable Lager.',
-    producerUnlimited: 'Producer has no upstream supplier. Unsold production stock still creates inventory cost.',
+    productionQuantity: 'Production quantity',
+    addProduction: 'Add to Lager',
+    productionAdded: 'Added production',
+    producerUnlimited: 'Producer has no upstream supplier. Add production manually before submitting if you need more usable Lager.',
     submitAndLock: 'Submit and lock round',
     submitFailed: 'Could not submit this round.',
     timerLobby: 'Lobby',
@@ -477,10 +481,14 @@ const text = {
     timeout: 'Zeitablauf',
     physicalCustomerOrder: 'Physischer Kundenauftrag',
     newOrderToSupplier: 'Neue Bestellung an vorgelagerte Rolle',
+    newOrderVisibilityHelp: 'Diese Bestellung wird nach dem Weiterklicken durch den Admin in der naechsten Runde zum eingehenden Auftrag der vorgelagerten Rolle.',
     deliveryQuantity: 'Lieferung an nachgelagerten Kunden',
     recommendedDelivery: 'Empfohlene Lieferung',
     deliveryHelp: 'Die empfohlene Lieferung ist die sinnvolle Maximalmenge: eingehender Auftrag plus Rueckstand, begrenzt durch nutzbares Lager.',
-    producerUnlimited: 'Produktion hat keine vorgelagerte Rolle. Ungenutzter Produktionsbestand verursacht Lagerkosten.',
+    productionQuantity: 'Produktionsmenge',
+    addProduction: 'Zum Lager hinzufuegen',
+    productionAdded: 'Produktion hinzugefuegt',
+    producerUnlimited: 'Produktion hat keine vorgelagerte Rolle. Fuege Produktion manuell hinzu, bevor du abgibst, wenn mehr nutzbares Lager benoetigt wird.',
     submitAndLock: 'Runde abgeben und sperren',
     submitFailed: 'Diese Runde konnte nicht abgegeben werden.',
     timerLobby: 'Lobby',
@@ -1487,37 +1495,55 @@ function RoleSubmissionForm({
   onUpdate: (game: Game) => void
 }) {
   const { language, t } = usePreferences()
-  const recommendedDelivery = getRecommendedDelivery(state)
   const [incomingOrder, setIncomingOrder] = useState('')
-  const [deliveryQuantity, setDeliveryQuantity] = useState(String(recommendedDelivery))
-  const [newOrder, setNewOrder] = useState(
-    role === 'producer' ? '0' : String(state.recommendedOrderQuantity),
-  )
+  const [deliveryQuantity, setDeliveryQuantity] = useState(String(getRecommendedDelivery(state)))
+  const [newOrder, setNewOrder] = useState('')
   const [orderTouched, setOrderTouched] = useState(false)
+  const [productionQuantity, setProductionQuantity] = useState('')
+  const [committedProduction, setCommittedProduction] = useState(0)
   const [error, setError] = useState('')
   const incomingOrderValue = incomingOrder.trim() === '' ? null : Number(incomingOrder)
+  const effectiveIncomingOrder =
+    role === 'retailer'
+      ? incomingOrderValue
+      : state.incomingOrder
+  const availableInventory = state.startingInventory + (role === 'producer' ? committedProduction : 0)
+  const recommendedDelivery = getRecommendedDelivery(state, availableInventory)
   const liveRecommendation =
-    role === 'retailer' && incomingOrderValue !== null && Number.isInteger(incomingOrderValue) && incomingOrderValue >= 0
+    role !== 'producer' &&
+    effectiveIncomingOrder !== null &&
+    Number.isInteger(effectiveIncomingOrder) &&
+    effectiveIncomingOrder >= 0
       ? buildLiveRecommendation(
           role,
           game.config,
           state,
-          incomingOrderValue,
+          effectiveIncomingOrder,
           state.recommendationInputs.upstreamInventoryCap,
         )
       : null
 
-  useEffect(() => {
-    if (!liveRecommendation || orderTouched) {
-      return
-    }
-
-    setNewOrder(String(liveRecommendation.quantity))
-  }, [liveRecommendation?.quantity, orderTouched])
+  const suggestedOrderValue =
+    role === 'producer'
+      ? '0'
+      : String(liveRecommendation?.quantity ?? state.recommendedOrderQuantity)
+  const displayedNewOrder = orderTouched ? newOrder : suggestedOrderValue
 
   function handleNewOrderChange(value: string) {
     setOrderTouched(true)
     setNewOrder(value)
+  }
+
+  function handleAddProduction() {
+    const quantity = productionQuantity.trim() === '' ? 0 : Number(productionQuantity)
+    if (!Number.isInteger(quantity) || quantity < 0) {
+      setError('Production quantity must be a non-negative integer.')
+      return
+    }
+
+    setError('')
+    setCommittedProduction(quantity)
+    setDeliveryQuantity(String(getRecommendedDelivery(state, state.startingInventory + quantity)))
   }
 
   function handleSubmit(event: FormEvent) {
@@ -1531,7 +1557,8 @@ function RoleSubmissionForm({
         submittedBy: compactRoleLabels[role],
         incomingOrder: role === 'retailer' ? Number(incomingOrder) : undefined,
         shippedQuantity: role === 'retailer' ? undefined : Number(deliveryQuantity),
-        newOrderToSupplier: role === 'producer' ? 0 : Number(newOrder),
+        newOrderToSupplier: role === 'producer' ? 0 : Number(displayedNewOrder),
+        productionQuantity: role === 'producer' ? committedProduction : undefined,
       })
       onUpdate(updated)
     } catch (submitError) {
@@ -1560,6 +1587,33 @@ function RoleSubmissionForm({
       ) : null}
       {role !== 'retailer' ? (
         <>
+          {role === 'producer' ? (
+            <>
+              <div className="info-box">
+                {t.producerUnlimited}
+              </div>
+              <NumberField
+                label={t.productionQuantity}
+                value={productionQuantity}
+                onChange={setProductionQuantity}
+                placeholder="0"
+              />
+              <button className="ghost-button" type="button" onClick={handleAddProduction}>
+                <Plus size={16} />
+                {t.addProduction}
+              </button>
+              {committedProduction > 0 ? (
+                <p className="muted form-note">{t.productionAdded}: {formatNumber(committedProduction, language)}</p>
+              ) : null}
+            </>
+          ) : null}
+          {role !== 'producer' && liveRecommendation ? (
+            <div className="recommendation compact-recommendation">
+              <span>{t.liveRecommendation}</span>
+              <strong>{formatNumber(liveRecommendation.quantity, language)}</strong>
+              <p>{formatRecommendationText(role, liveRecommendation.quantity, liveRecommendation.reason, liveRecommendation.inputs, language)}</p>
+            </div>
+          ) : null}
           <div className="recommendation compact-recommendation">
             <span>{t.recommendedDelivery}</span>
             <strong>{formatNumber(recommendedDelivery, language)}</strong>
@@ -1574,16 +1628,17 @@ function RoleSubmissionForm({
         </>
       ) : null}
       {role === 'producer' ? (
-        <div className="info-box">
-          {t.producerUnlimited}
-        </div>
+        null
       ) : (
-        <NumberField
-          label={t.newOrderToSupplier}
-          value={newOrder}
-          onChange={handleNewOrderChange}
-          placeholder="0"
-        />
+        <>
+          <NumberField
+            label={t.newOrderToSupplier}
+            value={displayedNewOrder}
+            onChange={handleNewOrderChange}
+            placeholder="0"
+          />
+          <p className="muted form-note">{t.newOrderVisibilityHelp}</p>
+        </>
       )}
       {error ? <p className="form-error">{error}</p> : null}
       <button className="primary-button" type="submit" disabled={game.status !== 'active'}>
@@ -1827,8 +1882,8 @@ function formatRecommendationText(
   return englishReason
 }
 
-function getRecommendedDelivery(state: RoleRoundState): number {
-  return Math.min(state.startingInventory, (state.incomingOrder ?? 0) + state.previousBackorder)
+function getRecommendedDelivery(state: RoleRoundState, availableInventory = state.startingInventory): number {
+  return Math.min(availableInventory, (state.incomingOrder ?? 0) + state.previousBackorder)
 }
 
 function formatTime(value: string, language: Language): string {

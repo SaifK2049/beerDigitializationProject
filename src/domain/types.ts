@@ -84,6 +84,7 @@ export interface RoleRoundState {
   wareneingangBufferBefore: number
   materialMovedToInventory: number
   materialMovedToWareneingang: number
+  producedQuantity: number
   incomingOrder: number | null
   incomingOrderSource: IncomingOrderSource
   previousBackorder: number
@@ -230,6 +231,7 @@ export interface SubmitRoundInput {
   incomingOrder?: number
   shippedQuantity?: number
   newOrderToSupplier?: number
+  productionQuantity?: number
   timedOut?: boolean
   autoAdvance?: boolean
 }
